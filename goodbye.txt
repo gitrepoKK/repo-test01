@@ -1,0 +1,1 @@
+prin("goodbye_KK")
