@@ -1,1 +1,2 @@
-prin("goodbye_KK")
+print("goodbye world"
+print("goodbye_KK")
