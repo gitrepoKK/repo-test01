@@ -1,2 +1,2 @@
-print("welcome_KK")
-print("welcome_KK_20121")
+print("welcome_KK");
+print("welcome_KK_20121");
