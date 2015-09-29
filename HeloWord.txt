@@ -5,3 +5,4 @@ print("Hello br_master");
 edit in main branch;
 print("Hello my dear friend");
 print("I am glad to see you");
+print("feature/er3 - ошибка при удалении сопутствующих файлов")
