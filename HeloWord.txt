@@ -1,7 +1,7 @@
-print("Hello world_KK")
-print("Hello everybody_KK")
-print("Hello br_master")
--- 29.09.15 - start2
-edit in main branch
-print("Hello my dear friend")
-print("I am glad to see you")
+print("Hello world_KK");
+print("Hello everybody_KK");
+print("Hello br_master");
+-- 29.09.15 - start2;
+edit in main branch;
+print("Hello my dear friend");
+print("I am glad to see you");
