@@ -1,0 +1,839 @@
+
+FUNCTION_BLOCK fb_Scada_Snd
+//Функциональный блок предназначен для формирования посылки по номеру нитки,
+//номеру объекта, номеру параметраи индексу шлейфа  посылки и отправки ее
+//в фифо буфер команд 
+//
+//   
+VAR_TEMP
+    funct   :BYTE;
+    ndata   :DINT;
+    Reg     :ARRAY[0..1] OF INT;
+    Post    :BOOL;
+    Bit     :INT;
+    Float   :BOOL;
+    Lenght  :WORD;
+END_VAR
+
+VAR
+    Pipe_N  :INT;
+    Obj_N   :INT;
+    Par_N   :INT;  
+    snd     :udt_Snd; 
+    bsnd    :BOOL;
+    tmp     :BOOL;
+    Data    :ARRAY[0..126] OF WORD;
+    itmp1   :INT;
+    itmp2   :INT;
+    itmp3   :INT;
+    itmp4   :INT;
+    it1     :INT;
+    it2     :INT;
+    tmp1    :WORD;
+    tmp2    :WORD;
+    tmp3    :WORD;
+    tmp4    :WORD;
+END_VAR
+
+CASE Obj_N OF
+                                                    //Команда для крана 0
+    0:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Открыть-закрыть
+            IF db_PIPE.P_Snd.Crane[0].WMCntr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+                
+            Reg[0]  := 184;
+            Reg[1]  := 211;
+            Post    := 0;  
+            Lenght  := w#16#6;     
+    END_CASE;
+                                                    //Команда для крана 1
+    1:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Открыть-закрыть
+            IF db_PIPE.P_Snd.Crane[1].WMCntr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+                    
+            Reg[0]  := 186;
+            Reg[1]  := 213;
+            Post    := 0;  
+            Lenght  := w#16#6; 
+    END_CASE;
+                                                    //Команда для крана 2
+    2:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Открыть-закрыть
+            IF db_PIPE.P_Snd.Crane[2].WMCntr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+                
+            Reg[0]  := 188;
+            Reg[1]  := 215;
+            Post    := 0;
+            Lenght  := w#16#6;
+    END_CASE;
+                                                    //Команда для КРУ
+    3:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Разрешить управление
+            IF db_PIPE.P_Snd.KRU.WCntr_Switch THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+                
+            Reg[0]  := 189;
+            Reg[1]  := 216;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        1:  funct       := b#16#6;                      //Ручное управление
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.KRU.WMContr);
+            Reg[0]      := 106;
+            Reg[1]      := 118;
+            Post        := 0;
+            snd.Bit     := 2;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        2:  funct       := b#16#6;                      //Пропорция ПИД
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.KRU.WP_PID * 100);
+            Reg[0]      := 1010;
+            Reg[1]      := 1039;
+            Post        := 0;
+            snd.Bit     := 3;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        3:  funct       := b#16#6;                      //Интеграл ПИД
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.KRU.WI_PID * 100);
+            Reg[0]      := 1009;
+            Reg[1]      := 1038;
+            Post        := 0;
+            snd.Bit     := 4;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        4:  funct       := b#16#6;                      //Дифференциал ПИД
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.KRU.WD_PID  *100);
+            Reg[0]      := 1008;
+            Reg[1]      := 1037;
+            Post        := 0;
+            snd.Bit     := 5;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+    END_CASE;
+                                                    //Команда для датчика давления
+    4:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Запись уставок
+            IF db_PIPE.P_Snd.Press.WWr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 1059;
+            Reg[1]  := 1065;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        1:  funct       := b#16#6;                  //Верхняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WUpThres * 100);
+            Reg[0]      := 1113;
+            Reg[1]      := 1131;
+            Post        := 0;
+            snd.Bit     := 4;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;  
+            Lenght      := w#16#6;  
+                          
+        2:  funct       := b#16#6;                  //Нижняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WDnThres * 100);
+            Reg[0]      := 1116;
+            Reg[1]      := 1134;
+            Post        := 0;
+            snd.Bit     := 5;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        3:  funct       := b#16#6;                  //Верхняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WUpRed * 100);
+            Reg[0]      := 1111;
+            Reg[1]      := 1129;
+            Post        := 0;
+            snd.Bit     := 6;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        4:  funct       := b#16#6;                  //Верхняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WUpYellow * 100);
+            Reg[0]      := 1112;
+            Reg[1]      := 1130;
+            Post        := 0;
+            snd.Bit     := 7;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1; 
+            Lenght      := w#16#6;  
+                    
+        5:  funct       := b#16#6;                  //Нижняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WDnYellow * 100);
+            Reg[0]      := 1115;
+            Reg[1]      := 1133;
+            Post        := 0;
+            snd.Bit     := 8;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+               
+        6:  funct       := b#16#6;                  //Нижняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Press.WDnRed * 100);
+            Reg[0]      := 1114;
+            Reg[1]      := 1132;
+            Post        := 0;
+            snd.Bit     := 9;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+    END_CASE;
+                                                    //Команда для датчика препада давления        
+    5:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Запись уставок
+            IF db_PIPE.P_Snd.PPress.WWr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 1060;
+            Reg[1]  := 1066;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        1:  funct       := b#16#6;                  //Верхняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WUpThres * 100);
+            Reg[0]      := 1119;
+            Reg[1]      := 1137;
+            Post        := 0;
+            snd.Bit     := 4;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        2:  funct       := b#16#6;                  //Нижняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WDnThres * 100);
+            Reg[0]      := 1122;
+            Reg[1]      := 1140;
+            Post        := 0;
+            snd.Bit     := 5;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;  
+            Lenght      := w#16#6;
+                
+        3:  funct       := b#16#6;                  //Верхняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WUpRed * 100);
+            Reg[0]      := 1117;
+            Reg[1]      := 1135;
+            Post        := 0;
+            snd.Bit     := 6;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        4:  funct       := b#16#6;                  //Верхняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WUpYellow * 100);
+            Reg[0]      := 1118;
+            Reg[1]      := 1136;
+            Post        := 0;
+            snd.Bit     := 7;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        5:  funct       := b#16#6;                  //Нижняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WDnYellow * 100);
+            Reg[0]      := 1121;
+            Reg[1]      := 1139;
+            Post        := 0;
+            snd.Bit     := 8;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        6:  funct       := b#16#6;                  //Нижняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.PPress.WDnRed * 100);
+            Reg[0]      := 1120;
+            Reg[1]      := 1138;
+            Post        := 0;
+            snd.Bit     := 9;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+    END_CASE;
+                                                    //Команда для датчика температуры        
+    6:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Запись уставок
+            IF db_PIPE.P_Snd.Temp.WWr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 1061;
+            Reg[1]  := 1067;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        1:  funct       := b#16#6;                  //Верхняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WUpThres * 100);
+            Reg[0]      := 1125;
+            Reg[1]      := 1143;
+            Post        := 0;
+            snd.Bit     := 4;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        2:  funct       := b#16#6;                  //Нижняя предельная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WDnThres * 100);
+            Reg[0]      := 1128;
+            Reg[1]      := 1146;
+            Post        := 0;
+            snd.Bit     := 5;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        3:  funct       := b#16#6;                  //Верхняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WUpRed * 100);
+            Reg[0]      := 1123;
+            Reg[1]      := 1141;
+            Post        := 0;
+            snd.Bit     := 6;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;  
+            Lenght      := w#16#6;
+                             
+        4:  funct       := b#16#6;                  //Верхняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WUpYellow * 100);
+            Reg[0]      := 1124;
+            Reg[1]      := 1142;
+            Post        := 0;
+            snd.Bit     := 7;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        5:  funct       := b#16#6;                  //Нижняя предупредительна граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WDnYellow * 100);
+            Reg[0]      := 1127;
+            Reg[1]      := 1145;
+            Post        := 0;
+            snd.Bit     := 8;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+                
+        6:  funct       := b#16#6;                  //Нижняя аварийная граница
+            ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Temp.WDnRed * 100);
+            Reg[0]      := 1126;
+            Reg[1]      := 1144;
+            Post        := 0;
+            snd.Bit     := 9;
+            snd.Pipe_N  := Pipe_N;
+            snd.Obj_N   := Obj_N;
+            snd.Par_N   := Par_N;
+            Float       := 1;
+            Lenght      := w#16#6;
+    END_CASE;
+                                                    //Команда для поста        
+    7:  CASE Par_N OF 
+        0:  funct := b#16#5;
+            IF db_PIPE.P_Snd.Post.Wval THEN
+                ndata := WORD_TO_INT(W#16#FF00);
+            ELSE 
+                ndata := WORD_TO_INT(W#16#0000);
+            END_IF;
+            Reg[0]  := 198;
+            Reg[1]  := 225;
+            Post    := 0;
+            Lenght  := w#16#6;
+    END_CASE;
+                                                    //Команда для измерения расхода        
+    8:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Включение расхода
+            IF db_PIPE.P_Snd.Flow.WSwitch THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 182;
+            Reg[1]  := 209;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+         1: funct := b#16#5;                        //Запись уставок
+            IF db_PIPE.P_Snd.Flow.WWr THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 181;
+            Reg[1]  := 208;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+       2:  funct       := b#16#6;                  //Включение расхода
+           ndata       := REAL_TO_INT(db_PIPE.P_Snd.Flow.WUst * 100);
+           Reg[0]      := 100;
+           Reg[1]      := 112;
+           Post        := 0;
+           snd.Bit     := 2;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+               
+       3:  funct       := b#16#6;                  //Плотность газа
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WDens * 100);
+           Reg[0]      := 1075;
+           Reg[1]      := 1083;
+           Post        := 0;
+           snd.Bit     := 3;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+                
+       4:  funct       := b#16#6;                  //Диаметр диафрагмы
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WDiamDiaf * 100);
+           Reg[0]      := 1072;
+           Reg[1]      := 1080;
+           Post        := 0;
+           snd.Bit     := 4;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+                
+       5:  funct       := b#16#6;                  //Диаметр IT
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WDiamIT * 100);
+           Reg[0]      := 1073;
+           Reg[1]      := 1081;
+           Post        := 0;
+           snd.Bit     := 5;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+                
+       6:  funct       := b#16#6;                  //Эквивалентная шероховатость
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WEqvSh * 100);
+           Reg[0]      := 1078;
+           Reg[1]      := 1086;
+           Post        := 0;
+           snd.Bit     := 6;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+               
+       7:  funct       := b#16#6;                  //Барометрическое давление
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WPressBar * 10000);
+           Reg[0]      := 1071;
+           Reg[1]      := 1079;
+           Post        := 0;
+           snd.Bit     := 7;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+               
+       8:  funct       := b#16#6;                  //Содержание СО2
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WCo2 * 100);
+           Reg[0]      := 1077;
+           Reg[1]      := 1085;
+           Post        := 0;
+           snd.Bit     := 8;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+                
+       9:  funct       := b#16#6;                  //Содержание азота
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WNitro * 100);
+           Reg[0]      := 1076;
+           Reg[1]      := 1084;
+           Post        := 0;
+           snd.Bit     := 9;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+                
+       10: funct       := b#16#6;                  //Начальный радиус кромки
+           ndata       := REAL_TO_DINT(db_PIPE.P_Snd.Flow.WRad * 100);
+           Reg[0]      := 1074;
+           Reg[1]      := 1082;
+           Post        := 0;
+           snd.Bit     := 10;
+           snd.Pipe_N  := Pipe_N;
+           snd.Obj_N   := Obj_N;
+           snd.Par_N   := Par_N;
+           Float       := 1;
+           Lenght      := w#16#6;
+    END_CASE;
+                                                    //Команда для режима работы        
+    9:  CASE Par_N OF 
+        0:  funct := b#16#5;                        //Режим ручной - автоматический
+            IF db_PIPE.P_Snd.WrkRegim.WSwRegWrk THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 199;
+            Reg[1]  := 226;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+         1: funct   := b#16#5;                      //Режим работы ГРП
+            IF db_PIPE.P_Snd.WrkRegim.WGRP THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 2;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 3;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 234;
+            Reg[1]  := 234;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        2:  funct   := b#16#6;                      //Управление режимом работы
+            ndata   := REAL_TO_DINT(BYTE_TO_DINT(db_PIPE.P_Snd.WrkRegim.WCntrReg) * 100);
+            Reg[0]  := 151;
+            Reg[1]  := 179;
+            Post    := 0;
+            Float   := 1;
+            CASE BYTE_TO_INT(db_PIPE.P_Snd.WrkRegim.WCntrReg) OF
+                0:  snd.Bit     := 4;               //Алгоритм останов
+                    snd.Pipe_N  := Pipe_N;
+                    snd.Obj_N   := Obj_N;
+                    snd.Par_N   := Par_N;
+                        
+                1:  snd.Bit     := 5;               //Алгоритм работа
+                    snd.Pipe_N  := Pipe_N;
+                    snd.Obj_N   := Obj_N;
+                    snd.Par_N   := Par_N;
+                        
+                2:  snd.Bit     := 6;               //Алгоритм замер
+                    snd.Pipe_N  := Pipe_N;
+                    snd.Obj_N   := Obj_N;
+                    snd.Par_N   := Par_N;
+                        
+                3:  snd.Bit     := 7;               //Алгоритм авария
+                    snd.Pipe_N  := Pipe_N;
+                    snd.Obj_N   := Obj_N;
+                    snd.Par_N   := Par_N;
+            END_CASE;
+            Lenght := w#16#6;
+    END_CASE;
+                                                    //Команда для сообщения шлейфа        
+    10: CASE Par_N OF 
+        0:  funct := b#16#5;                        //Разрешение аварии
+            IF db_PIPE.P_Snd.PipeMess.WPermAlarm THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 0;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 1;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 1063;
+            Reg[1]  := 1069;
+            Post    := 0;
+            Lenght  := w#16#6;
+                
+        1:  funct := b#16#5;                        //Сброс внутренней аварии
+            IF db_PIPE.P_Snd.PipeMess.WRstIntFault THEN
+                ndata       := WORD_TO_INT(W#16#FF00);
+                snd.Bit     := 2;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            ELSE 
+                ndata       := WORD_TO_INT(W#16#0000);
+                snd.Bit     := 3;
+                snd.Pipe_N  := Pipe_N;
+                snd.Obj_N   := Obj_N;
+                snd.Par_N   := Par_N;
+            END_IF;
+            Reg[0]  := 1062;
+            Reg[1]  := 1068;
+            Post    := 0;
+            Lenght  := w#16#6;
+      END_CASE;
+                                                    //Команда установки времени          
+      11:   CASE Par_N OF 
+            0:  funct   := b#16#10;
+                ndata   := 5;
+                                                    //упаковка мсек
+                itmp1   := db_PIPE.P_Snd.Times.WMSecond DIV 10;
+                itmp2   := db_PIPE.P_Snd.Times.WMSecond - itmp1 * 10; 
+                tmp1    := SHL(in := INT_TO_WORD(itmp1), n := 12);
+                tmp2    := SHL(in := INT_TO_WORD(itmp2), n := 8 );
+                                                    //упаковка сек
+                itmp3   := db_PIPE.P_Snd.Times.WSecond DIV 10;
+                itmp4   := db_PIPE.P_Snd.Times.WSecond - itmp3 * 10;
+                tmp3    := SHL(in := INT_TO_WORD(itmp3), n := 4);
+                tmp4    := INT_TO_WORD(itmp4); 
+                Data[0] := tmp1 OR tmp2 OR tmp3 OR tmp4;   
+                                                    //упаковка мин
+                itmp1   := db_PIPE.P_Snd.Times.WMinute DIV 10;
+                itmp2   := db_PIPE.P_Snd.Times.WMinute - itmp1 * 10; 
+                tmp1    := SHL(in := INT_TO_WORD(itmp1), n := 12);
+                tmp2    := SHL(in := INT_TO_WORD(itmp2), n := 8 );
+                                                    //упаковка час
+                itmp3   := db_PIPE.P_Snd.Times.WHour DIV 10;
+                itmp4   := db_PIPE.P_Snd.Times.WHour - itmp3 * 10;
+                tmp3    := SHL(in := INT_TO_WORD(itmp3), n := 4);
+                tmp4    := INT_TO_WORD(itmp4);
+                Data[1] := tmp1 OR tmp2 OR tmp3 OR tmp4;
+                                                    //упаковка день недели
+                itmp1   := db_PIPE.P_Snd.Times.WDay_of_Week DIV 10;
+                itmp2   := db_PIPE.P_Snd.Times.WDay_of_Week - itmp1 * 10; 
+                tmp1    := SHL(in := INT_TO_WORD(itmp1), n := 12);
+                tmp2    := SHL(in := INT_TO_WORD(itmp2), n := 8 );
+                                                    //упаковка день
+                itmp3   := db_PIPE.P_Snd.Times.WDay DIV 10;
+                itmp4   := db_PIPE.P_Snd.Times.WDay - itmp3 * 10;
+                tmp3    := SHL(in := INT_TO_WORD(itmp3), n := 4);
+                tmp4    := INT_TO_WORD(itmp4);
+                Data[2] := tmp1 OR tmp2 OR tmp3 OR tmp4;
+                                                    //упаковка месяц
+                itmp1   := db_PIPE.P_Snd.Times.WMonth DIV 10;
+                itmp2   := db_PIPE.P_Snd.Times.WMonth-itmp1 * 10; 
+                tmp1    := SHL(in := INT_TO_WORD(itmp1), n := 12);
+                tmp2    := SHL(in := INT_TO_WORD(itmp2), n := 8 );
+                                                    //упаковка год
+                it1     :=  db_PIPE.P_Snd.Times.WYear DIV 1000;
+                it2     := (db_PIPE.P_Snd.Times.WYear - it1 * 1000) DIV 100;
+                itmp3   := (db_PIPE.P_Snd.Times.WYear - it1 * 1000 - it2 * 100) DIV 10;         
+                itmp4   :=  db_PIPE.P_Snd.Times.WYear - it1 * 1000 - it2 * 100-itmp3 * 10;
+                tmp3    := SHL(in := INT_TO_WORD(itmp3), n := 4);
+                tmp4    := INT_TO_WORD(itmp4);
+                Data[3] := tmp1 OR tmp2 OR tmp3 OR tmp4;
+                                                    //упаковка год
+                itmp1   :=  db_PIPE.P_Snd.Times.WYear DIV 1000;
+                itmp2   := (db_PIPE.P_Snd.Times.WYear - itmp1 * 1000) DIV 100;
+                tmp1    := SHL(in := INT_TO_WORD(itmp1), n := 12);
+                tmp2    := SHL(in := INT_TO_WORD(itmp2), n := 8 );   
+                tmp3    := w#16#0;
+                tmp4    := w#16#0;
+                Data[4] := tmp1 OR tmp2 OR tmp3 OR tmp4;
+                Reg[0]  := 1058;
+                Reg[1]  := 1058;
+                Post    := 0;
+                Float   := 1;
+                Lenght  := w#16#10;
+        END_CASE;
+ELSE
+        ;//Wrong Parametr Obj_N
+END_CASE;
+        
+snd.adress := db_PIPE.P[Pipe_N].ADDR;
+snd.funct  := funct;
+
+IF db_pipe.p[Pipe_N].Ind = 0 THEN
+    snd.reg := INT_TO_WORD(Reg[0]);
+ELSE
+    snd.reg := INT_TO_WORD(Reg[1]);
+END_IF;
+
+IF Float THEN                   //Флоат д.б в диапазоне -300 +300
+    IF ndata > 100 * 300 THEN
+        snd.ndata := 100 * 300;
+    END_IF;
+    
+    IF ndata < -100 * 300 THEN
+        snd.ndata := -100 * 300;
+    END_IF;
+    
+    IF ndata <= 100 * 300 AND ndata >= -100 * 300 THEN
+        snd.ndata := DINT_TO_INT(ndata);
+     END_IF;
+ELSE
+    snd.ndata := DINT_TO_INT(ndata);  
+END_IF;
+
+snd.Lenght  := Lenght;
+snd.cmd     := 1;
+snd.data    := data;
+IF Post THEN                     //Положить в буфер с учетом поста
+    IF db_PIPE.P[Pipe_N].POST.RReq THEN 
+        fb_Put.idb_fb_Put(CP := db_PIPE.P[Pipe_N].CP,PORT := db_PIPE.P[Pipe_N].PORT, snd := snd); 
+    END_IF; 
+ELSE 
+    fb_Put.idb_fb_Put(CP := db_PIPE.P[Pipe_N].CP,PORT := db_PIPE.P[Pipe_N].PORT, snd := snd);
+END_IF;           
+      
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_Scada_Snd fb_Scada_Snd
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+
+
+

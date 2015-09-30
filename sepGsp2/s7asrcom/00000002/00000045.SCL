@@ -1,0 +1,361 @@
+//======================================= >F1 ===================================
+
+(* 
+      F.1. FcCalcFlow(ObjW : word, NumPos : int, BitVal_W : bool) : word -
+   Функция выисления РЖ (Расхода Жидкости) и РТГ (Расхода Топливного Газа).
+      Выполняется "на фоне", вызовом из OB циклического прерывания (лучше Ob32 1 сек),
+   Интервал циклического прерывания м. менять вызовом этой функции из другого 
+   Ob3X и переназначением интервала прерывания в DbSepBlow.dzTimeScan.   
+      Алгоритм : А1) РЖ вычисляется при продувках клапанов по сливу жидкости на
+   сепараторах СИ1, СИ2, СП. 
+      Специфика расчёта РЖ : 1) Инертность после подачи команды на закрытие клапана : 
+   жидкость продолжает сливаться пока клапан полностью не закроется (BlowState=3).
+   Т.к. процесс слива жидкости не стабильный, а процент открытия клапана продувки
+   пользователь м. задавать, то это состояние продувки (BlowState=3) надо уметь 
+   определять  и учитывать при кол-ве слива жидкости за продувку.
+      2) Утечки клапана на сливе Жидкости : когда Жидкость продолжает утекать при
+   истечении "разумного" времени (TmBreakFlowMax) после подачи команды на закрытие
+   клапана (когда произошло "доЗакрытие" клапана). (Опять важно правильное вычис-
+   ление состояния BlowState=3).
+      3) Погрешность датчика SensErr по расходу Жидкости : датчик м. показывать не 
+   Нулевую величину при BlowState=3 и реальном физическом отсутствии утечек.
+      4) Ошибка в схеме автоматизации по организации точного РЖ : датчик РЖ "умный"
+   но на ПЛК приходят "загрублённые" интегральные данные и учёт РЖ на ПЛК "по 
+   определению" будет отличаться от сводных показаний датчика. Т.е. расчёт РЖ в
+   текущей схеме заведомо "приблизительный". (Для исправления этой ситуации нужно 
+   либо получать "мгновенный расход" РЖ по Hart-протоколу, либо через счётчик им-
+   пульсов - у датчика для этого возможности есть. Но это - изменение проекта, 
+   возможно в следующих сериях..)
+      Итак, алгоритм РЖ : Вычисление текущего BlowState и событий по его изменеию
+   сравнением с BlowState_Prev. Затем вычисление на их основе продолжительности 
+   продувок, интервала между ними, РЖ за продувку. И далее по цепочке всех нако-
+   пительных параметров по учёту РЖ. Это - "скелет", подробности см. ниже в ком-
+   ментариях. Попутно м. выдавать предупреждающие сообщения об "отклонениях" нор-
+   мального течения продувки или принудительно её останавливать (это опционально). 
+      А2) РТГ. Опять слабая схема автоматизации для Расчёта Расхода Топливного 
+   Газа : Мгновенный "неприведённый" расход ТГ поступает через dP (вместо перепа-
+   да давления) вместе c P (давлением газа) и T (температурой газа) через ВН2012
+   ("пушкой по воробьям"). Задача ПЛК s7 простая : собрать данные, вычислить "при-
+   ведённое" мгновенное значение РТГ, зависящее от P, T и далее по цепочке обес-
+   печить вычисление всех накопительных параметров по РТГ. На текущий момент 
+   (осень, 2014г) формула пересчёта не представлена заказчиком и пока здесь отсут-
+   ствует. Весь остальной механизм реализован. Подробности см. ниже в комментариях.
+      Notes! n1) При вычислении длительности продувок и интервала между ними для 
+   упрощения и определённости используются мометы физического подачи команд на 
+   Открытие и Закрытие клапана, т.е. изменение SignalClOpW (не считается временем
+   продувки "доЗакрытие" - интервал времени от подачи команды на закрытие клапана
+   до прекращения расхода Жидкости. Этому неск-ко причин : 1) м.б. утечки 2) слыш-
+   ны физические щелчки на клапане (когда пришла комада) 3) команды приходят при
+   уровнях контроля регулирования жидкости и д.б. прямое соответствие 4) "хвос-
+   тик", когда вода полностью перекрывается - более-менее стабильный (если нет 
+   утечек клапана) - т.е. для настройки уровней, при которых происходит продувка
+   он не важен. 
+      n2) При "доЗакрытии" насчитывается интервал между продувками, но продолжает
+   считаться РЖ за продувку до BlowState=3, или по доп. условиям ???????????
+*)
+ 
+
+Function FcCalcFlow : void 
+
+Title = 'FcSetBit'
+Version: '1.0'
+Author: Konst
+Name: FcSetBit
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+(*
+ ObjW : word; // 
+ NumPos : int;
+ BitVal_W : bool;
+*)
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ lblBlowDuration_EvOver : bool; //BlowDuration_EvOver lblEvOver
+ i1,n1 : int;
+ chBlowState_FromTo : int; // изменение BlowState за цикл : 0- нет\12: 1->2 \23: 2->3 \31: 3->1 \21: 2->1 \1(01): 0->1  ..
+  
+ calcCycle, nr1 : real; // цикл опроса в секундах 
+ Flow1Cycle : real; // приращение РЖ за цикл сканирования с учётом погрешности датчика РЖ
+ 
+ nw1 : word;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+(* 
+      1. Вычисление РЖ при продувках клапанов по сливу жидкости на сепараторах
+   СИ1, СИ2, СП.
+*)
+
+calcCycle:=int_to_real(DbSepBlow.dzTimeScan)/1000.0;   // цикл сканирования в сек. 
+
+for i1:=1 to DbSepBlow.numSep do // цикл по числу сепараторов 
+ 
+ //DbSepBlow.SepBlowParam[i1].Flow_Instant_Prev:=DbSepBlow.SepBlowParam[i1].Flow_Instant_Current; // для анализа растёт\падает - м.б. убрать
+
+(* 
+      1.1. Подготовка перед вычислением РЖ : вычисление  состояний продувки и
+   определение изменения этих состояний и на их основе их "переброска" счётчиков
+   РЖ, интервалов,..
+      Алгоритм : вычисление на основе сигнала на открытие/закрытие клапана про-
+   дувки SignalClOpW из DbSipValve состояний BlowState и локального признака 
+   chBlowState_FromTo изменеия BlowState с момента предыдущего цикла. При наступ-
+   лении моментов смены состояний продувки происходит "переброска" счётчиков.
+      Всё это выполняется в 2 "прохода". Связано это с "упрощённым" методом вычисле-
+   ния состояния BlowState=3 (момента "доЗакрытия" клапана). В данной версии он 
+   определяется по истечению Tm_Valve_FullClose - "времени на полное закрытие" 
+   после BlowState=2 (продувка "Выключена"). 
+      Время Tm_Valve_FullClose задаётся пользователем и м.б. с приличным запасом
+  (напр. 1-2 мин). Его значение влияет только на период, когда РЖ за этот период
+  считается РЖ за продувку. После BlowState=3 "доЗакрытия" клапана и до момента     
+  BlowState=1 ("Открытия" клапана) РЖ считается как "РЖ за интервал между продув-
+  ками". Длительность продувки и интервал между продувками не зависят от 
+  Tm_Valve_FullClose и вычисляются, как описано выше, в моменты подачи команд на 
+  открытие/закрытие клапана.
+      Далее (см. п.1.2) "РЖ за продувку" и "РЖ за интервал между продувками" 
+  суммируются в общий накопительный РЖ (за час/ сутки/ месяц/ сезон), а здесь 
+  разделены для удобства наблюдением за ТехПроцессом и настройками по его управ-
+  лению.
+*)
+
+(* 
+      1.1.1. 1-й проход : 1) Вычисление BlowState - только значений 1,2
+       2) Определение chBlowState_FromTo - моментов смены значений BlowState 
+       3) "Переброска" счётчиков в эти моменты  
+*)
+
+ chBlowState_FromTo:=0; // сброс для каждого сепаратора
+
+(* 
+      1.1. Вычисление состояния продувки BlowState.
+*)
+
+ //Вычисление BlowState - только значений 1,2
+ if (DbSipValve.SipValveParam[i1].SignalClOpW)
+ then // значение DO-сигнала "закрыть" : 0-закрыть клапан\ 1- открыть
+   DbSepBlow.SepBlowParam[i1].BlowState:=1; // продувка начата (включена)
+ else // клапан закрыт
+   if (DbSepBlow.SepBlowParam[i1].BlowState_Prev<>3) 
+   then // "круг" с предыдущего цикла : клапан "выключен", и "на предыдущем цикле" не определяляся как "доЗакрытый"
+     DbSepBlow.SepBlowParam[i1].BlowState:=2; // продувка выключена - подан сигнал на зпакрытие клапана
+   end_if;  
+ end_if; // if (DbSipValve.SipValveParam[i1].SignalClOpW)
+
+ //Определение chBlowState_FromTo - моментов смены значений BlowState 
+ if (DbSepBlow.SepBlowParam[i1].BlowState<>DbSepBlow.SepBlowParam[i1].BlowState_Prev)
+ then // значение состояния продувки изменилось
+   chBlowState_FromTo:=DbSepBlow.SepBlowParam[i1].BlowState_Prev*10+DbSepBlow.SepBlowParam[i1].BlowState; //
+   DbSepBlow.SepBlowParam[i1].BlowState_Prev:=DbSepBlow.SepBlowParam[i1].BlowState;
+   //
+   DbSepBlow.SepBlowParam[i1].ni20:=chBlowState_FromTo; //Deb - фиксируем для отладки
+ end_if; // if (DbSepBlow.SepBlowParam[i1].BlowState<>..
+
+ //"Переброска" счётчиков в моменты смены значений BlowState (пока BlowState=1 или 2) 
+ case chBlowState_FromTo of
+   12 : // Состояние клапана : s+=>[S-]=>w0 выключен(2) после включения(1) - пришла команда на выключение клапана
+     // наступивший период : Продувки нет, "доЗакрытие" клапана
+
+     // "Переброска" счётчиков интервала между продувками 
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval_Prev:=DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval;
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval:=0.0;
+ 
+   21,31 : // Состояние клапана : S+=>[s-] или S+=>[s-]=>w0 включен(1) после выключения(2/3) - пришла команда на включение клапана
+     // наступивший период : Продувка начата
+
+     // "Переброска" счётчиков длительности продувки 
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration_Prev:=DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration;
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration:=0.0;
+
+     // "Переброска" счётчиков РЖ за продувку 
+     DbSepBlow.SepBlowParam[i1].Flow_Blow_Prew:=DbSepBlow.SepBlowParam[i1].Flow_Blow_Current;
+     DbSepBlow.SepBlowParam[i1].Flow_Blow_Current:=0.0;
+
+   //else :  //case chBlowState_FromTo of
+ end_case; // case chBlowState_FromTo  
+
+(* 
+      1.1.2. 2-й проход : 1) Вычисление BlowState=3
+       2) определение chBlowState_FromTo - моментов смены значений BlowState 
+       3) переброска счётчиков в эти моменты  
+*)
+
+   if (DbSepBlow.SepBlowParam[i1].BlowState=2 and 
+       DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval>=DbSepBlow.SepBlowParam[i1].Tm_Valve_FullClose)
+   then // прошло время "доЗакрытия" клапана
+     DbSepBlow.SepBlowParam[i1].BlowState:=3;
+
+     //Вычисление chBlowState_FromTo - моментов смены значений BlowState 
+     chBlowState_FromTo:=DbSepBlow.SepBlowParam[i1].BlowState_Prev*10+DbSepBlow.SepBlowParam[i1].BlowState; //
+     DbSepBlow.SepBlowParam[i1].BlowState_Prev:=DbSepBlow.SepBlowParam[i1].BlowState;
+     //
+     DbSepBlow.SepBlowParam[i1].ni20:=chBlowState_FromTo; //Deb - фиксируем для отладки
+
+     // "переброска" счётчика РЖ в интервале между продувками после "доЗакрытия" клапана
+     DbSepBlow.SepBlowParam[i1].Flow_Post_FullClose_Prev:=DbSepBlow.SepBlowParam[i1].Flow_Post_FullClose;
+     DbSepBlow.SepBlowParam[i1].Flow_Post_FullClose:=0.0;
+
+   end_if; //if (DbSepBlow.SepBlowParam[i1].BlowState=2 and.. 
+
+(* 
+      1.4. Вычисление параметров РЖ для i1-го сепаратора в зависимости от состояние продувки BlowState
+*)
+
+ // стоит ли вообще что-то считать : вдруг "закачка" или сепаратор не используется или недостаточно воды
+ if (true)
+ then
+   // номер эл-та в DbFlowData.FlowData[n1], соответствующий DbSepBlow.SepBlowParam[i1]
+   n1:=4+i1; //4 - const для записи в DbFlowData.FlowData[4+i1]
+
+(* 
+      1.4.1. Вычисление Flow1Cycle - приращения величины РЖ за цикл сканирования.
+      Алгоритм : V - текущий мгновенный РЖ поступает с датчика РЖ в м3/Час. Сна-
+   чала производится "отсечка" на dX, потом "смещение нуля" на dY и затем, если 
+   значение РЖ>0, то оно приводится к м3/Сек.
+      Notes! n1) "Отсечка" : если V<dX, то принимается V=0. 
+   n2) "Смещение нуля" : если V>dX, то принимается V=V-dY.
+*)
+   // приращение РЖ за цикл сканирования с учётом погрешности датчика РЖ (
+  // Flow1Cycle:=(DbSepBlow.SepBlowParam[i1].Flow_Instant_Current-DbSepBlow.SepBlowParam[i1].Flow_Sens_Err)*calcCycle;
+
+   nr1:=DbSepBlow.SepBlowParam[i1].Flow_Instant_Current; //текущий мгновенный РЖ (м3/час)
+   
+   if (nr1<DbSepBlow.SepBlowParam[i1].Flow_Sens_Correct_Cut)
+   then // "отсечка" :
+     nr1:=0.0;
+   else //"смещение нуля"
+     nr1:=nr1-DbSepBlow.SepBlowParam[i1].Flow_Sens_Correct_0;
+   end_if; //if (nr1<DbSepBlow.SepBlowParam[i1].Flow_Sens_Correct_Cut)
+
+   Flow1Cycle:=(nr1/3600)*calcCycle; // м3/сек => м3/"цикл вызова прерывания"
+
+   //Note! Увеличенние счётчика из DbFlowData : РЖ за сезон происходит "автоматом" при EventHDM
+
+   //Увеличение счётчика из DbFlowData : РЖ за текущий час
+   DbFlowData.FlowData[n1].Flow_Hour_Current:=
+     DbFlowData.FlowData[n1].Flow_Hour_Current+Flow1Cycle;
+
+   //Увеличение счётчика из DbFlowData : РЖ за тест (если он включен)
+   if (DbFlowData.FlowData[n1].Test_GoOn)
+   then // режим теста включен
+     DbFlowData.FlowData[n1].Flow_Test_Current:=
+       DbFlowData.FlowData[n1].Flow_Test_Current+Flow1Cycle;
+   end_if; //if (DbFlowData.FlowData[n1].Test_GoOn)
+
+
+   lblBlowDuration_EvOver:=false; // локальная для вычисления BlowDuration_EvOver из DbSepBlow
+   
+   case DbSepBlow.SepBlowParam[i1].BlowState of
+     1 : // Продувка Включена (стадия "Открытия" клапана)
+    
+     // Увеличение счётчика длительности продувки
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration:=DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration+calcCycle;
+     // Вычисление РЖ за продувку
+     DbSepBlow.SepBlowParam[i1].Flow_Blow_Current:=DbSepBlow.SepBlowParam[i1].Flow_Blow_Current+Flow1Cycle;
+
+     // Выключение сообщения о завершении продувки по истечении срока MAX длительности (м. в другом месте)  
+     if (DbSepBlow.SepBlowParam[i1].BlowMessDurationMax)
+     then //не дрючим
+       DbSepBlow.SepBlowParam[i1].BlowMessDurationMax:=false; 
+     end_if; //if (DbSepBlow.SepBlowParam[i1].BlowMessDurationMax)
+
+     if (DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration>=DbSepBlow.SepBlowParam[i1].BlowTimeDurationMax)
+     then //истекла max длительность продувки
+       lblBlowDuration_EvOver:=true;
+       FcSetCaution(1); // инициализация проигрывания тревоги №1 (из DbCaution.CautionParam[1])
+       
+       // Включение сообщения типа "СП1 - продувка окончена - ограничение по MAX длительности"   
+       DbSepBlow.SepBlowParam[i1].BlowMessDurationMax:=true; 
+     end_if; // if (DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration>=..     
+ 
+     2 : // Продувка Выключена (стадия "доЗакрытия" клапана)
+  
+     // Увеличение счётчика интервала между продувками
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval:=DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval+calcCycle;
+     //продолжаем считать РЖ за продувку до полного "доЗакрытия"
+     DbSepBlow.SepBlowParam[i1].Flow_Blow_Current:=DbSepBlow.SepBlowParam[i1].Flow_Blow_Current+Flow1Cycle;
+
+     3 : // Продувка Окончена (стадия "Закрытия" клапана)
+ 
+     // Увеличение счётчика интервала между продувками
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval:=DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval+calcCycle;
+     // Вычисление РЖ в интервале между продувками после "доЗакрытия" клапана
+     DbSepBlow.SepBlowParam[i1].Flow_Post_FullClose:=DbSepBlow.SepBlowParam[i1].Flow_Post_FullClose+Flow1Cycle;
+ 
+   end_case; // case DbSepBlow.SepBlowParam[i1].BlowState  
+
+   //ограничение счётчика интервала между продувками (требуется для долго не работающих сепараторов)
+   if (DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval>=8640000)
+   then // 1 день - 86400 сек
+     DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval:=0;
+   end_if; // (DbSepBlow.SepBlowParam[i1].HmiBlowTimeInterval>=..
+
+ 
+ 
+   //чтобы не дрючить..
+   if (DbSepBlow.SepBlowParam[i1].BlowDuration_EvOver<>lblBlowDuration_EvOver)
+   then
+     DbSepBlow.SepBlowParam[i1].BlowDuration_EvOver:=lblBlowDuration_EvOver;
+   end_if; // if (DbSepBlow.SepBlowParam[i1].lblBlowDuration_EvOver<>..
+ 
+ end_if; // if (true)
+
+end_for; // for i1:=1 to DbSepBlow.numSep 
+  
+///////////////////////////////////////////////////////////////////
+
+(* 
+      2. Вычисление РТГ.
+      Notes! n1) 
+*)
+
+ // стоит ли вообще что-то считать : вдруг данные с ВН2012 недостоверны
+ 
+ n1:=4; // номер эл-та в DbSepBu.SepBuParam[n1], DbFlowData.FlowData[n1] для ТГ
+ if not(DbSepBu.SepBuParam[n1].lblErrDataRefresh)
+ then //данные с БУ достоверны (ещё м. анализировать db_Pipe.Invalid)
+
+(* 
+      1.4.1. Вычисление Flow1Cycle - приращения величины РТГ за цикл сканирования.
+      Алгоритм : V - текущий мгновенный РТГ поступает с датчика перепада давления
+   через ВН2012
+      РТГ в м3/Час по каналу. Сна-
+   чала производится "отсечка" на dX, потом "смещение нуля" на dY и затем, если 
+   значение РЖ>0, то оно приводится к м3/Сек.
+      Notes! n1) "Отсечка" : если V<dX, то принимается V=0. 
+   n2) "Смещение нуля" : если V>dX, то принимается V=V-dY.
+На wcc : dP=SepParam3.PPress_RVal \ T=SepParam3.Temp_RVal \ P=SepParam3.Press_RVal \ 'SepParam3.Invalid'
+
+*)
+   // приращение РТГ за цикл сканирования с учётом погрешности датчика РТГ (
+ 
+   nr1:=DbSepBu.SepBuParam[n1].PPress_RVal; //текущий мгновенный РТГ (м3/час) -передаётся через dP
+   
+   if (nr1<DbControl.FlowTG_Sens_Correct_Cut)
+   then // "отсечка" :
+     nr1:=0.0;
+   else //"смещение нуля"
+     nr1:=nr1-DbControl.FlowTG_Sens_Correct_0;
+   end_if; //if (nr1<DbControl.FlowTG_Sens_Correct_Cut)
+
+   Flow1Cycle:=(nr1/3600)*calcCycle; // м3/сек => м3/"цикл вызова прерывания"
+   //Note! Ещё д.б. формула для приведения ТРГ (P,T)  !!!
+   //Note! Увеличенние счётчика из DbFlowData : РЖ за сезон происходит "автоматом" при EventHDM
+
+   //Увеличение счётчика из DbFlowData : РЖ за текущий час
+   DbFlowData.FlowData[n1].Flow_Hour_Current:=
+     DbFlowData.FlowData[n1].Flow_Hour_Current+Flow1Cycle;
+
+   //Увеличение счётчика из DbFlowData : РЖ за тест (если он включен)
+   if (DbFlowData.FlowData[n1].Test_GoOn)
+   then // режим теста включен
+     DbFlowData.FlowData[n1].Flow_Test_Current:=
+       DbFlowData.FlowData[n1].Flow_Test_Current+Flow1Cycle;
+   end_if; //if (DbFlowData.FlowData[n1].Test_GoOn)
+ 
+ end_if; //if not(DbSepBu.SepBuParam[n1].lblErrDataRefresh)
+
+End_Function

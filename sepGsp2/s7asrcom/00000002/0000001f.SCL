@@ -1,0 +1,118 @@
+FUNCTION_BLOCK fb_QueueEx
+//Блок предназначен для организации обмена данными.  
+//Комм проц не может одновременно передавать пообоим портам,
+//поэтому организован обмен одновременный для двух процессоров, но последовательный
+//для обоих портов на процессоре.
+//Также здесь вызываются функции приема-передачи для каждого порта и функции обработки
+//принятых данных и обрабатывается запрос на команду с верхнего уровня.
+//
+//
+//
+VAR_TEMP
+    i   :INT;
+END_VAR
+
+VAR
+    
+    PORT,_PORT  :INT;
+    CP          :INT;
+    done        :ARRAY[0..1, 0..1] OF BOOL;
+    bsnd        :ARRAY[0..1, 0..1] OF BOOL;
+    DoneSts     :ARRAY[0..1, 0..1] OF BOOL;
+    cnt         :ARRAY[0..1, 0..1] OF INT;
+    old_cnt     :ARRAY[0..1, 0..1] OF INT;
+    cnt_e       :ARRAY[0..1, 0..1] OF INT  :=  3,3,3,3;
+    s_e         :ARRAY[0..1, 0..1] OF INT;
+    s_d         :ARRAY[0..1, 0..1] OF INT;
+    _local      :ARRAY[0..1, 0..1,1..16] OF BYTE;
+    clk         :ARRAY[0..1, 0..1] OF DINT;
+    clk_out     :ARRAY[0..1, 0..1] OF INT;
+    clk_tod_old :ARRAY[0..1, 0..1] OF TOD;
+    clk_tod     :ARRAY[0..1, 0..1] OF TOD;
+    _clk_dt     :ARRAY[0..1, 0..1] OF DT;
+    snd_tmp     :ARRAY[0..1, 0..1] OF udt_Snd;
+    RcvBuff     :ARRAY[0..1, 0..1] OF udt_Rcv;
+    wlen        :ARRAY[0..1, 0..1] OF WORD;
+    Stop_Snd    :ARRAY[0..1, 0..1] OF BOOL;
+    go          :ARRAY[0..1, 0..1] OF BOOL;
+END_VAR
+
+
+FOR CP := 0 TO 0 BY 1 DO
+    FOR PORT := 0 TO 1 BY 1 DO
+        
+        _PORT               := 1 - PORT;                                    //Перекидка порта 1-0, 0-1
+        old_cnt[CP, _PORT]  := cnt[CP, _PORT];                              //для измерения времени
+   
+        IF done[CP, PORT]  THEN //AND go[CP,_PORT]
+   
+            go  [CP, _PORT]   := 0;
+            done[CP,  PORT]   := 0;
+            bsnd[CP, _PORT]   := 1;
+
+                                                                            //Если пропуск хода то не обрабатываем ответ
+            IF NOT idb_fb_Solver.next[CP,PORT] THEN
+        
+                fb_StatusRcv.idb_fb_StatusRcv(cnt       := cnt[CP, PORT],   //
+                                              CP        := CP,
+                                              PORT      := PORT,
+                                              DoneSts   := DoneSts[CP, PORT],
+                                              snd       := snd_tmp[CP, PORT]
+                                             );
+            END_IF; 
+       
+            fb_Solver.idb_fb_Solver(cnt     := cnt[CP, _PORT],              //Определение следующей посылки
+                                    CP      := CP,
+                                    PORT    := _PORT,
+                                    e_cnt   := cnt_e[CP,_PORT]
+                                   );
+                                                      
+            cnt    [CP, _PORT] := idb_fb_Solver.cnt_out[CP, _PORT];
+            snd_tmp[CP, _PORT] := idb_fb_Solver.snd[CP, _PORT];
+                                                                            //Если пропуск хода, то переходим на следующий порт
+            IF idb_fb_Solver.next[CP, _PORT] THEN 
+                bsnd[CP, _PORT] := 0;
+                done[CP, _PORT] := 1;
+            END_IF;
+        END_IF;
+                                                                            //Измерение времени
+        IF cnt[CP, PORT] = 0 AND old_cnt[CP, PORT] <> cnt[CP, PORT] THEN
+         
+            clk_tod_old[CP, PORT]   := clk_tod[CP,PORT];
+            clk_out[CP, PORT]       := READ_CLK(CDT := _clk_dt[CP, PORT]);
+            clk_tod[CP, PORT]       := DT_TOD  (IN  := _clk_dt[CP, PORT]);
+            
+            IF TOD_TO_DINT(clk_tod[CP,PORT])-TOD_TO_DINT(clk_tod_old[CP,PORT]) > 0  THEN
+                clk[CP, PORT] := TOD_TO_DINT(clk_tod[CP ,PORT]) - TOD_TO_DINT(clk_tod_old[CP ,PORT]);
+            END_IF;
+            
+        END_IF;
+    END_FOR;
+END_FOR;
+                                                                //Функции приема передачи для каждого порта
+fb_Snd_Rcv_CP00.idb_fb_Snd_Rcv_CP00(SndBuff := snd_tmp[0, 0]); 
+fb_Snd_Rcv_CP01.idb_fb_Snd_Rcv_CP01(SndBuff := snd_tmp[0, 1]); 
+                         
+                                                                //Расшифровка посылок и присвоение переменных                          
+fb_Cnvt_Float1.idb_fb_Cnvt_Float1(); 
+fb_Cnvt_Byte1 .idb_fb_Cnvt_Byte1 ();
+fb_Cnvt_Bool1 .idb_fb_Cnvt_Bool1 ();
+fb_Cnvt_Float2.idb_fb_Cnvt_Float2();
+fb_Cnvt_Bool2 .idb_fb_Cnvt_Bool2 ();
+                                                                //Обработка команды с верхнего уровня 
+IF db_Cmmn.Scd_Send THEN 
+ 
+ fb_Scada_Snd.idb_fb_Scada_Snd();                                                         
+ 
+ db_Cmmn.Scd_Send := 0;
+END_IF;
+
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_QueueEx  fb_QueueEx
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK

@@ -1,0 +1,132 @@
+(* 
+      $db_mainSet2.scl - Объявление блоков данных :
+      
+         1.  DbInfo         
+         2.  DbBitMess     
+         3.  DbControl     
+      Notes! n1) В этом наборе ($db_mainSet2.scl) собраны дополнительные блоки данных, не
+   вошедшие в состав "тематических" $db_*.scl.
+*)
+
+//======================================= >1 ===================================
+
+(*
+      1.  DbInfo - блок данных, для работы с ..
+*)
+
+Data_Block DbInfo
+
+Title = 'Общая информация'
+Author: Konst
+Name: DbInfo
+Family: Main
+Struct
+ Ver : word;
+ k1,k2,k3 :int;
+ ExchangeBU : bool;
+
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+ ExchangeBU:= true;  // опрашивать БУ (включить часть по обмену с БУ из УОУ)
+
+End_Data_Block
+
+//======================================= >2 ===================================
+
+(*
+      2.  DbBitMess - блок данных для работы с битовыми сообщениями.
+*)
+
+Data_Block DbBitMess
+
+Title = 'Сообщения'
+Author: Konst
+Name: DbMess
+Family: Main
+Struct
+ Mess_AI_LoLo : word; //биты для сообщений о нарушение НАГ для датчииков AI, тип А\К (Авар\Красный)
+ Mess_AI_Lo : word; //биты для сообщений о нарушение НПГ для датчииков AI, тип А\Ж (Авар\Желтый)
+ Mess_AI_Hi : word; //биты для сообщений о нарушение ВПГ для датчииков AI, тип А\Ж 
+ Mess_AI_HiHi : word; //биты для сообщений о нарушение ВАГ для датчииков AI, тип А.К.(Андрей Конст)
+
+ Mess_KrPpu_Close : word; //биты для сообщений об закрытии кранов , тип Инф
+ Mess_KrPpu_Open : word; //биты для сообщений об открытии кранов , тип Инф
+ Mess_KrPpu_ErrClose : word; //биты для сообщений об ошибке при закрытии кранов , тип А\Ж
+ Mess_KrPpu_ErrOpen : word; //биты для сообщений об открытии кранов , тип А\Ж (Авар\Желтый)
+ Mess_KrPpu_ErrFatal : word; //биты для сообщений о фатальной неиспр. кранов , тип А\К
+
+ Mess_BU_ErrRefresh : word; //биты для сообщений об ошибке обновления данных с БУ(Нет сязи),тип А\Ж
+
+ Mess_BU_Norm : word; //биты для сообщений о восстановлении связи с БУ,тип Инф
+ Mess_AI_Norm : word; //биты для сообщений о зозврате значения датчика в норму,тип Инф
+ Mess_KrPpu_Norm : word; //биты для сообщений о восстановлении исправности крана,тип Инф
+
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+
+End_Data_Block
+
+//======================================= >3 ===================================
+
+(*
+      3.  DbControl - блок данных для работы с ..
+*)
+
+Data_Block DbControl
+
+Title = 'Управление'
+Author: Konst
+Name: DbContr
+Family: Main
+Struct
+ DtSync_Hmi  : TDateTimeInt; //int-компоненты даты для синхронизации времени Hmi=>Plc
+ DtSync_Once : TDateTimeInt; //int-компоненты даты для дополнительного задания времени Plc 
+ 
+ lblDtSync_Hmi : bool; //метка о синхронизации DtPlc с Hmi : 1-синхронизировать\0-нет
+ lblDtSync_Hmi_Ignore : bool; //метка об игнорировании синхронизации DtPlc с Hmi : 1-игнорировать\0-нет
+ lblDtSync_Once : bool; //метка о доп-й синхронизации DtPlc через DtSync_Once: 1-синхронизировать\0-нет
+ 
+ DtPlc_Change_Event : int; //флаг события "изменение DtPlc":0-не изм.\1-ч/з DtSync_HMI\2-ч/з DtSync_Once
+ DtPlc_Change_Counter : int; //счётчик числа изменений DtPlc времени ПЛК ([1-30000])
+ 
+ DtPlc_Change_Value_Time : time; //время в формате "Time", на которую изменилось DtPlc после синхронизации
+ DtPlc_Change_Value_MSec : dint; //время в мСек, на которую изменилось DtPlc после синхронизации
+ 
+ DtPlc_Format_Int : TDateTimeInt; //время ПЛК DtPlc в формате int-компоненты даты 
+ DtPlc_Format_Str : string[22];  //время ПЛК DtPlc в строковом формате "DD.MM.YY HH:MM:SS" 
+
+ FlowTG_Sens_Correct_Cut : real; //!!"отсечка" dX показания датчика РТГ (при V<dX, принимается V=0)
+ FlowTG_Sens_Correct_0 : real; //!!"смещение нуля" dY показания датчика РТГ (при V>dX, принимается V=V-dY)
+
+ isMode_AvOst : bool; //флаг активности события "Режим Аварийный Останов" для всей УПС: 0- нет\1- да 
+ isMode_AvOst_Prev : bool; //флаг события "Режим Аварийный Останов" - предыдущее значение  
+
+ isMode_RegimRemont : bool; //флаг активности события "Режим Ремонт" для всей подс-мы УПС: 0- нет\1- да 
+ isMode_RegimRemont_Prev : bool; //флаг события "Режим Ремонт" - предыдущее значение  
+ 
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+//стартовые значения int-компонент даты Hmi (для отладки)
+ DtSync_HMI.Year :=2012;
+ DtSync_HMI.Month :=3;
+ DtSync_HMI.Day :=23;
+ DtSync_HMI.Hour :=17;
+ DtSync_HMI.Minute :=41;
+ DtSync_HMI.Sec :=27;
+ DtSync_HMI.MSec :=345;
+
+ FlowTG_Sens_Correct_Cut:=0.05; //"отсечка" dX показания датчика РТГ
+ FlowTG_Sens_Correct_0:=0.03; //"смещение нуля" dY показания датчика РТГ
+ 
+ isMode_AvOst:=false; //"Режим Аварийный Останов" не активен
+ isMode_RegimRemont:=false; //"Режим Ремонт" не активен
+
+End_Data_Block
+
+

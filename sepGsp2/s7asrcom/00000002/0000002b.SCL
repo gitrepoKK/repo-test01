@@ -1,0 +1,80 @@
+FUNCTION fc_MsgReset : VOID  
+
+CONST
+    CRANE   := 0;
+    CRU     := 1;
+    PRESS   := 2;
+    PPRESS  := 3;
+    TEMP    := 4;
+    FLOW    := 5;
+    WORKREG := 6;
+    PIPEMSG := 7;
+    OPER    := 8;
+    INFO    := 9;
+    OTHER   := 10;    
+END_CONST  
+
+VAR_INPUT
+    typ     : INT;
+    p       : INT;
+    pm      : INT;
+    icrane   : INT;
+END_VAR 
+   
+VAR_TEMP
+ndword  :INT;
+nbit    :INT;
+dw      :DWORD;
+END_VAR
+   
+
+ndword      := pm   DIV 32;
+nbit        := pm   MOD 32;
+
+IF NOT INT_TO_BOOL (nbit DIV 16) THEN 
+    
+    dw := NOT DINT_TO_DWORD(REAL_TO_DINT(2 ** nbit));
+ELSE
+    dw := NOT SHL(in := DINT_TO_DWORD(REAL_TO_DINT(2 ** (nbit MOD 16))), n := 16);
+END_IF;
+
+
+CASE Typ OF 
+    CRANE:      db_MsgCrane.event   [ndword, p, icrane] := db_MsgCrane.event [ndword, p, icrane] AND dw; 
+                db_MsgCrane.flag    [ndword, p, icrane] := db_MsgCrane.flag  [ndword, p, icrane] AND dw; 
+        
+    CRU:        db_MsgCru.event     [ndword, p] := db_MsgCru.event      [ndword, p] AND dw; 
+                db_MsgCru.flag      [ndword, p] := db_MsgCru.flag       [ndword, p] AND dw;
+        
+    PRESS:      db_MsgPress.event   [ndword, p] := db_MsgPress.event    [ndword, p] AND dw; 
+                db_MsgPress.flag    [ndword, p] := db_MsgPress.flag     [ndword, p] AND dw;
+
+    PPRESS:     db_MsgPPress.event  [ndword, p] := db_MsgPPress.event   [ndword, p] AND dw; 
+                db_MsgPPress.flag   [ndword, p] := db_MsgPPress.flag    [ndword, p] AND dw;
+
+    TEMP:       db_MsgTemp.event    [ndword, p] := db_MsgTemp.event     [ndword, p] AND dw; 
+                db_MsgTemp.flag     [ndword, p] := db_MsgTemp.flag      [ndword, p] AND dw;
+        
+    FLOW:       db_MsgFlow.event    [ndword, p] := db_MsgFlow.event     [ndword, p] AND dw; 
+                db_MsgFlow.flag     [ndword, p] := db_MsgFlow.flag      [ndword, p] AND dw;
+        
+    WORKREG:    db_MsgWorkReg.event [ndword, p] := db_MsgWorkReg.event  [ndword, p] AND dw; 
+                db_MsgWorkReg.flag  [ndword, p] := db_MsgWorkReg.flag   [ndword, p] AND dw;
+        
+    PIPEMSG:    db_MsgPipeMsg.event [ndword, p] := db_MsgPipeMsg.event  [ndword, p] AND dw; 
+                db_MsgPipeMsg.flag  [ndword, p] := db_MsgPipeMsg.flag   [ndword, p] AND dw;
+        
+    OPER:       db_MsgOper.event    [ndword, p] := db_MsgOper.event     [ndword, p] AND dw; 
+                db_MsgOper.flag     [ndword, p] := db_MsgOper.flag      [ndword, p] AND dw;
+        
+    INFO:       db_MsgInfo.event    [ndword, p] := db_MsgInfo.event     [ndword, p] AND dw; 
+                db_MsgInfo.flag     [ndword, p] := db_MsgInfo.flag      [ndword, p] AND dw;
+        
+    OTHER:      db_MsgOther.event   [ndword, p] := db_MsgOther.event    [ndword, p] AND dw; 
+                db_MsgOther.flag    [ndword, p] := db_MsgOther.flag     [ndword, p] AND dw;
+
+ELSE 
+    ;
+END_CASE;   
+ 
+END_FUNCTION

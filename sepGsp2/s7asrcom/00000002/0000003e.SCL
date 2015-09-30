@@ -1,0 +1,60 @@
+organization_block obCyclicCalcFlow
+
+Title= 'Restart CPU'
+Version: '1.0'
+Author: Konst
+Name: Main1
+Family: Main
+
+var_temp
+ Info : array [0..19] of byte;
+ // Temporary Variables
+ i1,n1 : int;    
+end_var
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Ob32 : Обработка циклических прерываний.
+      Note! 
+*)
+
+//**********************
+  
+ if (DbCaution.isActive) then FcPlayCaution(); end_if; //проигрывание тревог из DbCaution.MelodyBuffer
+      
+ FcCalcFlow(); // вычисление РЖ (Расхода Жидкости) и РТГ (Расхода Топливного Газа)
+
+end_organization_block
+
+//////////////////////////////////////////////////////////////////////////////
+
+organization_block obErrRunTime
+
+Title= 'Restart CPU'
+Version: '1.0'
+Author: Konst
+Name: Main1
+Family: Main
+
+var_temp
+ Info : array [0..19] of byte;
+ // Temporary Variables
+ i1,n1 : int;    
+end_var
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Ob80 : Обработка .
+      Note! Требует изменения - хотя бы счётчик вызовов в "нормальную" переменную
+*)
+      
+ DbDeb1.ni3:=DbDeb1.ni3+1;
+ if DbDeb1.ni3>30 
+ then 
+   DbDeb1.ni3:=1;
+ end_if;
+ 
+
+end_organization_block

@@ -1,0 +1,38 @@
+
+FUNCTION_BLOCK fb_DataFill
+//Заполнение конфигурационных данных
+VAR_TEMP
+    i   :INT;
+    j   :INT;
+    k   :INT;   
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    FOR j := 0 TO 1 BY 1 DO
+        FOR k := 0 TO 2 BY 1 DO
+            db_BU.CP[i].PORT[j].BU[k].snd[0].adress            := db_BU.CP[i].PORT[j].BU[k].addr;
+            db_BU.CP[i].PORT[j].BU[k].snd[1].adress            := db_BU.CP[i].PORT[j].BU[k].addr;
+            
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].addr  := db_BU.CP[i].PORT[j].BU[k].addr;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].CP    := i;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PORT  := j;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Ind   := 0;
+        
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].addr  := db_BU.CP[i].PORT[j].BU[k].addr;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].CP    := i;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PORT  := j;
+            db_pipe.p[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Ind   := 1;
+         END_FOR;
+    END_FOR;
+END_FOR;   
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_DataFill  fb_DataFill
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK

@@ -1,0 +1,53 @@
+
+FUNCTION_BLOCK fb_Cnvt_Bool2
+//Разборка булевых переменных первой посылки,  присвоение переменных 
+VAR_TEMP
+    i   :INT;
+    j   :INT;
+    k   :INT;
+END_VAR
+
+VAR
+    CP      :INT;
+    PORT    :INT;
+    BU      :INT;
+    out     :BOOL;
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    FOR j := 0 TO 1 BY 1 DO
+        FOR k := 0 TO 2 BY 1 DO
+            IF 1 THEN //db_BU.CP[i].PORT[j].BU[k].rcv[1].ready THEN
+                
+                db_BU.CP[i].PORT[j].BU[k].rcv[1].ready := 0;                    //Сброс готовности посылки к обработке
+           
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RWr               := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 7),  N := 15));
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PPress.RWr              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 6),  N := 15));
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Temp.RWr                := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 5),  N := 15)); 
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RRstIntFault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 4),  N := 15));  
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RPermAlarm     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 3),  N := 15));   
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RPipeGas       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 2),  N := 15));
+           
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RWr               := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 1),  N := 15));
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PPress.RWr              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[62], N := 0),  N := 15));
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Temp.RWr                := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[63], N := 15), N := 15)); 
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RRstIntFault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[63], N := 14), N := 15));  
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RPermAlarm     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[63], N := 13), N := 15));   
+           db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RPipeGas       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[1].rcv[63], N := 12), N := 15));
+                                    ///MsgHanders
+           fc_MsgHandlerCycle(cp := i, port := j, bu := k );          
+            END_IF;   
+         END_FOR;       
+    END_FOR;
+END_FOR;
+
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_Cnvt_Bool2  fb_Cnvt_Bool2
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

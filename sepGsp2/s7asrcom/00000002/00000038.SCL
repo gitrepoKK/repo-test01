@@ -1,0 +1,161 @@
+(*
+      Объявления Udt & Db для работы с клапанами Sipart :
+         Udt TSipValve
+         DbSipValve
+*)
+
+//======================================= >1 ===================================
+
+(*
+      1. Udt TSipValve - тип данных для хранения общих "клапанных" параметров
+   клапанов Sipart.
+      На ГСП2 всего 5 клапанов Sipart : 
+             1 - Клапан СИ1 на сливе жидкости
+             2 - Клапан СИ2 на сливе жидкости
+             3 - Клапан СП1 на сливе жидкости
+             4 - Клапан регулирования Топливного Газа на факел
+             5 - Клапан СП1 после сужающего устройства
+      Notes! n1) Специфические параметры по продувкам и расчёту РЖ (Расхода Жид-
+   кости) для первых трёх клапанов (на сливе жидкости сепараторов) выделены 
+   отдельно в TSepBlow и DbSepBlow.
+*)
+
+type TSipValve:             
+ struct   
+  AddrPQW : int; //адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+  EmulPQW : bool; //эмуляция сигналов PQW:0-выключена (реальные сигналы!)\1- эмуляция
+  TypeNormClOp : bool; //тип клапана: 0- нормально закрытый\ 1- нормально открытый 
+ 
+  SignalClOpW : bool; //значение DO-сигнала "закрыть" : 0-закрыть клапан\ 1- открыть
+  SignalClOpW_Prev : bool; //предыд. значение DO-сигнала SignalClOpW
+  ControlModeAuto : bool; //метка: 1-автоматич. режим упр. клапаном \ 0- ручной 
+  ControlModeAuto_Prev : bool; //предыд. значение Sprt_Sp_VentMode_Auto
+  ControlModeAuto_ChEnable : bool; //метка: 1-разрешать автоматический режим\ 0-нет (для огр. [4,5] с ВУ) 
+
+  SignalClOpW_EvClose : bool; //флаг события : подача команды "закрыть клапан"
+  SignalClOpW_EvOpen : bool; //флаг события : подача команды "открыть клапан"
+
+  Value_Task_Percent : int; //заданный процент открытия клапана (]0,100])
+  Value_Task_Percent_Prev : int; //предыд. значение процента открытия клапана (]0,100])
+  Value_DigitPQW : int; //посланное на PQW цифровое значение [0-27648] (что "висит" на PQW[])
+  Value_DigitPQW_Prev : int; //предыд. цифровое значение [0-27648], посланное на PQW 
+
+  isBan_AutoControl : bool; //флаг запрета автоматического управления клапаном: 0-нет запрета\ 1- запрещено
+  isBan_HandControl : bool; //флаг запрета ручного управления клапаном: 0-нет запрета\ 1- запрещено
+ 
+  reasonBan_AutoControl : int; //причина запрета автоматического управления клапаном (RBC_ из DbEnum)
+  reasonBan_HandControl : int; //причина запрета ручного управления клапаном (RBC_ из DbEnum)
+
+ end_struct
+end_type
+
+//======================================= >2 ===================================
+
+(*
+      2.  DbSipValve - блок данных для хранения значений общих "клапанных" пара-
+   метров клапанов Sipart.
+      Особенности организации : для работы с клапанами Sipart :
+          1 - SipValveParam[1] - Клапан СИ1 на сливе жидкости
+          2 - SipValveParam[2] - Клапан СИ2 на сливе жидкости
+          3 - SipValveParam[3] - Клапан СП1 на сливе жидкости
+          4 - SipValveParam[4] - Клапан регулирования топливного газа на факел
+          5 - SipValveParam[5] - Клапан СП1 после сужающего устройства
+      Notes! n1) Специфические параметры по продувкам и расчёту РЖ (Расхода Жид-
+   кости) для первых трёх клапанов (на сливе жидкости сепараторов) выделены 
+   отдельно в TSepBlow и DbSepBlow.
+      n2) Порядок первых трёх элементов (СИ1=>СИ2=>СП1) д.б. одинаков у DbSipValve
+   и DbSepBlow (для удобства обработки вынесенных в отдельный DbSepBlow параметров).
+*)
+
+Data_Block DbSipValve
+
+Struct
+ numSipValve : int;  // количество клапанов
+ SipValveParam : Array [1..5] Of TSipValve; 
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+ numSipValve:=5; // общее количество клапанов Sipart (меньше не задавать!)
+ 
+(* 
+      2.1. Задание начальных значений для общих параметров клапанов Sipart.
+*)
+
+(*
+      2.1.1. SipValveParam[1] - клапан СИ1 на сливе жидкости.
+*)
+
+ SipValveParam[1].AddrPQW:=514; // адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+ SipValveParam[1].EmulPQW:=false; // эмуляция сигналов PQW выключена
+ SipValveParam[1].TypeNormClOp:=false; //тип клапана: 0- нормально закрытый\ 1- нормально открытый
+ SipValveParam[1].SignalClOpW:=false; // "закрыть" (необязательно: присвоится при сравнении ControlModeAuto & ControlModeAuto_Prev)
+ SipValveParam[1].ControlModeAuto:=true; // автоматический режим управления клапаном
+ SipValveParam[1].ControlModeAuto_Prev:=false; // предыд. значение 
+ SipValveParam[1].Value_Task_Percent:=100; //по умолчанию открывать клапан на 100%
+
+ SipValveParam[1].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ SipValveParam[1].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+      2.1.2. SipValveParam[2] - клапан СИ2 на сливе жидкости.
+*)
+
+ SipValveParam[2].AddrPQW:=516; // адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+ SipValveParam[2].EmulPQW:=false; // эмуляция сигналов PQW выключена
+ SipValveParam[2].TypeNormClOp:=false; //тип клапана: 0- нормально закрытый\ 1- нормально открытый
+ SipValveParam[2].SignalClOpW:=false; // "закрыть" (необязательно: присвоится при сравнении ControlModeAuto & ControlModeAuto_Prev)
+ SipValveParam[2].ControlModeAuto:=true; // автоматический режим управления клапаном
+ SipValveParam[2].ControlModeAuto_Prev:=false; // предыд. значение 
+ SipValveParam[2].Value_Task_Percent:=100; //по умолчанию открывать клапан на 100%
+
+ SipValveParam[2].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ SipValveParam[2].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+      2.1.3. SipValveParam[3] - клапан СП1 на сливе жидкости.
+*)
+
+ SipValveParam[3].AddrPQW:=512; // адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+ SipValveParam[3].EmulPQW:=false; // эмуляция сигналов PQW выключена
+ SipValveParam[3].TypeNormClOp:=false; //тип клапана: 0- нормально закрытый\ 1- нормально открытый
+ SipValveParam[3].SignalClOpW:=false; // "закрыть" (необязательно: присвоится при сравнении ControlModeAuto & ControlModeAuto_Prev)
+ SipValveParam[3].ControlModeAuto:=true; // автоматический режим управления клапаном
+ SipValveParam[3].ControlModeAuto_Prev:=false; // предыд. значение 
+ SipValveParam[3].Value_Task_Percent:=100; //по умолчанию открывать клапан на 100%
+
+ SipValveParam[3].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ SipValveParam[3].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+      2.1.4. SipValveParam[4] - Клапан регулирования топливного газа на факел.
+*)
+
+ SipValveParam[4].AddrPQW:=520; // адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+ SipValveParam[4].EmulPQW:=false; // эмуляция сигналов PQW выключена
+ SipValveParam[4].TypeNormClOp:=false; //тип клапана: 0- нормально закрытый\ 1- нормально открытый
+ SipValveParam[4].SignalClOpW:=false; // "закрыть" (необязательно: присвоится при сравнении ControlModeAuto & ControlModeAuto_Prev)
+ SipValveParam[4].ControlModeAuto:=true; // автоматический режим управления клапаном
+ SipValveParam[4].ControlModeAuto_Prev:=false; // предыд. значение 
+ SipValveParam[4].Value_Task_Percent:=100; //по умолчанию открывать клапан на 100%
+
+ SipValveParam[4].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ SipValveParam[4].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+      2.1.5. SipValveParam[5] - Клапан СП1 после сужающего устройства.
+*)
+
+ SipValveParam[5].AddrPQW:=518; // адрес реального выхода PQW[] для выходного AO-сигнала клапана Sipart
+ SipValveParam[5].EmulPQW:=false; // эмуляция сигналов PQW выключена
+ SipValveParam[5].TypeNormClOp:=false; //тип клапана: 0- нормально закрытый\ 1- нормально открытый
+ SipValveParam[5].SignalClOpW:=false; // "закрыть" (необязательно: присвоится при сравнении ControlModeAuto & ControlModeAuto_Prev)
+ SipValveParam[5].ControlModeAuto:=true; // автоматический режим управления клапаном
+ SipValveParam[5].ControlModeAuto_Prev:=false; // предыд. значение 
+ SipValveParam[5].Value_Task_Percent:=100; //по умолчанию открывать клапан на 100%
+
+ SipValveParam[5].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ SipValveParam[5].isBan_HandControl:=false; // нет запрета на Ручное управление
+  
+End_Data_Block
+

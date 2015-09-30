@@ -1,0 +1,14 @@
+
+ORGANIZATION_BLOCK ob_Restart
+
+VAR_TEMP
+    // Reserved
+    info : ARRAY[0..19] OF BYTE;
+    // Temporary Variables
+END_VAR
+///restart  main cycle
+  fb_Restart.idb_fb_Restart();
+    //MessageInit
+//  fb_msg_00.idb_fb_msg_00();
+  
+END_ORGANIZATION_BLOCK

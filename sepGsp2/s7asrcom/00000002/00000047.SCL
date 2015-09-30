@@ -1,0 +1,75 @@
+(* 
+      Объявления Udt & Db для работы с данными для хранения информации о 
+   параметрах БУ ВН2012 :
+      
+        Udt TSepBuParam
+        DbSepBu     
+*)
+
+//======================================= >1 ===================================
+
+(*
+      1.TSepBuParam - тип данных для хранения информации о параметрах БУ ВН2012.
+*)
+
+type TSepBuParam:  
+ struct
+  addr : byte; // дрес блока управления в HEX (из db_BU)
+  vDbBu_Pipe0 : Int; // номер 1-й нитки для шлейфа 57 БУ (номер эл-та в db_Pipe (начинается с 0)
+  vDbBu_Pipe1 : Int; // номер 2-й нитки для шлейфа 3 БУ (="db_BU".CP[0].PORT[0-1].BU[0-1].PIPE[1])
+  
+  Temp_RVal : real; // Т - температура газа на 1-й нитке 
+  Press_RVal : real; // P - давление газа на 1-й нитке 
+  PPress_RVal : real; // dP - перепад давления газа на 1-й нитке 
+  Flow_RVal : real; // расход газа на 1-й нитке : мгновенный
+  Flow_RFlowHour : real; // расход газа на 1-й нитке :  за предыдущий час
+  Flow_RFlowDay : real; // расход газа на 1-й нитке :  за сутки
+  Flow_RCnt : real; // расход газа на 1-й нитке : за сезон
+ 
+  CheckRefresh : real; // значение сканируемого на обновление параметра (периодическое чтение)
+
+  lblErrDataRefresh : bool; // Признак ошибки обновления данных в db_Pipe: 0-обновляются \1- не обновляются
+  lblCopyErrToInvalid : bool; // Признак назначения db_PIPE.Invalid=1 при lblErr..=1 : 0-нет\1-копировать 
+  lblSetSubstValue : bool; // Признак переназначения "999.9" в параметры db_PIPE : 0-нет \ 1-переназначать
+
+  EmulBuParam : bool; //*эмуляция параметров из БУ : 0 - выключена (реальные сигпалы!)\ 1 - эмуляция
+ end_struct    
+end_type   
+
+//======================================= >2 ===================================
+
+(*
+      2.  DbSepBu - блок данных для работы с ..
+*)
+
+Data_Block DbSepBu 
+
+Title = 'Значения параметров БУ ВН2012'
+Author: Konst
+Name: DbSepBu
+Family: Main
+Struct
+ numSepBuParam : int;  
+ SepBuParam : Array [1..4] Of TSepBuParam;
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+ numSepBuParam:=4; //верхняя граница массива SepBuParam[] (обработка с 1-го элемента массива!)
+
+// BU1:
+ SepBuParam[1].lblCopyErrToInvalid:=true; // назначать при ошибке db_PIPE.Invalid=1 
+ SepBuParam[1].lblSetSubstValue:=false; // не переприсваивать при ошибке параметрам db_PIPE значение "999.9" 
+// BU2: 
+ SepBuParam[2].lblCopyErrToInvalid:=true; // назначать при ошибке db_PIPE.Invalid=1 
+ SepBuParam[2].lblSetSubstValue:=false; // не переприсваивать при ошибке параметрам db_PIPE значение "999.9" 
+// BU3: 
+ SepBuParam[3].lblCopyErrToInvalid:=true; // назначать при ошибке db_PIPE.Invalid=1 
+ SepBuParam[3].lblSetSubstValue:=false; // не переприсваивать при ошибке параметрам db_PIPE значение "999.9" 
+// BU4: 
+ SepBuParam[4].lblCopyErrToInvalid:=true; // назначать при ошибке db_PIPE.Invalid=1 
+ SepBuParam[4].lblSetSubstValue:=false; // не переприсваивать при ошибке параметрам db_PIPE значение "999.9" 
+ 
+End_Data_Block
+
+

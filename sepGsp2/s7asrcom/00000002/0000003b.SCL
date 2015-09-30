@@ -1,0 +1,327 @@
+(*
+      FcSep.scl - Содержит рабочие функции для проекта sepGsp2:
+        F.1. FcSetBit(ObjW : word, NumPos : int, BitVal_W : bool) : word 
+        F.2. FcBcdByteToInt(ObjB : byte) : int 
+        F.3. FcIntToDt(ObjDtInt : TDateTimeInt) : dt 
+        F.4. FcDtToInt(ndt1 : dt, ObjDtInt : TDateTimeInt) : void 
+        F.5. FcDtIntToStr(ObjDtInt : TDateTimeInt) : string[22] 
+*)
+
+//======================================= >F1 ==================================
+
+(* 
+      F.1. FcSetBit(ObjW : word, NumPos : int, BitVal_W : bool) : word -
+   Функция задания значения бита BitVal_W, находящегося в позиции NumPos в пере-
+   менной ObjW типа word. Возвращает word с изменённым битом.
+      Применяется для битовых сообщений, управляемых через биты в переменных ти-
+   па word : 1 - сообщение появилось \ 0 - ушло
+*) 
+
+
+Function FcSetBit : word 
+
+Title = 'FcSetBit'
+Version: '1.0'
+Author: Konst
+Name: FcSetBit
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+ ObjW : word; // 
+ NumPos : int;
+ BitVal_W : bool;
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ nbl1 : bool;
+ nw1,nw2,nw3 : word;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+(* 
+      1. Сдвиг --> замена --> сдвиг   
+      Notes! n1) М. ещё возвращать то, что было
+   n2) Если NumPos>16, то берется по модулю 16.
+      
+*) 
+
+nw1:=ror(IN:=ObjW,N:=NumPos-1);  // ставим заменяемый бит в конец: сдвигаем биты вправо на NumPos-1
+nbl1:=word_to_bool(nw1); // значение бита, который надо заменить
+ 
+if (nbl1)
+then // было "1" 
+  if (BitVal_W)
+  then // надо назначить "1"
+    nw2:=w#16#0000; // (1 xor 0 =1)
+  else // надо назначить "0"
+    nw2:=w#16#0001; // (1 xor 1 =0)
+  end_if; //if (BitVal_W)  
+else // было "0"
+  if (BitVal_W)
+  then // надо назначить "1"
+    nw2:=w#16#0001; // (0 xor 1 =1)
+  else // надо назначить "0"
+    nw2:=w#16#0000; // (0 xor 0 =0)
+  end_if; //if (BitVal_W)  
+end_if; //if (nbl1)  
+
+nw3:=nw1 xor nw2; // накладываем маску на последний бит
+FcSetBit:=rol(IN:=nw3,N:=NumPos-1);  // ставим бит на место 
+ 
+End_Function
+
+//======================================= >F2 ==================================
+
+(* 
+      F.2. FcBcdByteToInt(ObjB : byte) : int - 
+   Функция преобразования BcdByte в Int.
+      Алгоритм : BCD формат - двоично-десятичный формат : Byte=8bit= 4 + 4
+      Старшие 4bit = "десятки" в десятичной с-ме : пребразуем из двоичного формата
+   в десятичный и умножаем на 10.
+      Младшие 4bit = "единицы" в десятичной с-ме : пребразуем из двоичного формата
+   в десятичный и умножаем на 1.
+      Далее 2 десятичных числа складываем и получаем int из BCD. Т.о. в формате BCD
+   в одном байте м. передать целые числа из диапазона [0-99])
+      Пример : Byte=20=0001 0100=("0001")*10 + ("0100")*1=1*10+4*1=10+4=14(int)
+*) 
+
+Function FcBcdByteToInt : int 
+
+Title = 'BcdByte_ToInt'
+Version: '1.0'
+Author: Konst
+Name: BcdByte
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+ ObjB : byte; // 
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ nbt1, nbt2 : byte;
+ ni1,ni2 : int;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+ //преобразование в int младших 4bit
+ nbt1:=shl(IN:=ObjB,N:=4); //сдвиг влево на 4бита  : 0001 0100 => 0100 0000
+ nbt2:=shr(IN:=nbt1,N:=4); //сдвиг вправо на 4бита : 0100 0000 => 0000 0100 - (4bit "младших" без "старших")
+ ni1:=byte_to_int(nbt2); 
+
+ //преобразование в int старших 4bit
+ nbt2:=shr(IN:=ObjB,N:=4); //сдвиг вправо на 4бита : 0001 0100 => 0000 0001 - (4bit "старших" без "младших")
+ ni2:=byte_to_int(nbt2);
+
+ FcBcdByteToInt:=ni2*10+ni1;  
+ 
+End_Function
+
+
+//======================================= >F3 ==================================
+
+(* 
+      F.3. FcIntToDt(ObjDtInt : TDateTimeInt) : dt - 
+   Функция формирования переменной сложного типа данных DT (Date_And_Time) из 
+   компонент даты целого типа, передавемых в структуре TDateTimeInt (YY, MM, 
+   DD, HH, MM, Sec, MSec).
+      Алгоритм : Используется метод формирования переменной типа DT путём форми-
+   рования компонентов DT в BCD-формате (компонентов структуры TDateTimeBcd) и 
+   получение результата в виде DT через указатель на TDateTimeBcd.
+      Каждому компоненту DT типа Int соответствует аналогичный компонент типа Byte
+   в BCD-формате. Так что задача сводится к поочерёдному преобразованию каждого
+   компонента Int из TDateTimeInt в соответствующий компонент Byte из TDateTimeBcd
+   (Int => Byte). 
+      Исключение составляет преобразование Мсек ([0-999]}, т.к. в одном BCD-байте
+   м. передать максимальное число 99. Поэтому по правилам BCD-формата для DT байт 
+   MSec1 - содержит 2 старших разряда от MSec, а байт MSec2 - содержит "единицы" 
+   [0-9] от MSec, и то в 4-х старших битах (а 4 младших бита используются для пе-
+   редачи номера дня недели (но здесь мы про день недели забываем (=0)).
+      Notes! n1) По "классике" надо бы проверять входные параметры на соответствие
+   диапазонам (из компонент Int д. собираться "правильная" дата), а по результату
+   функции определять возможную ошибку. "Ответственность" перенесена на функцию 
+   установки времени Set_Clk(), которая возвращает код ошибки (-32640 (8080) - ош. 
+   даты \ -32639 (8081) - ош. времени) в случае "неправильной" даты. Эта функция
+   используется в "паре" с FcIntToDt() при синхронизации времени ВУ => ПЛК (основ-
+   ное применение FcIntToDt() в sepGsp2).
+*) 
+
+Function FcIntToDt : dt 
+
+Title = 'FcIntToDt'
+Version: '1.0'
+Author: Konst
+Name: IntToDt
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+ ObjDtInt : TDateTimeInt; // 
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ ni1 : int;
+ dtBcd : TDateTimeBcd;
+ TimePlcBcd at dtBcd : dt;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+ // д.б. проверка на диапазоны !
+
+ dtBcd.Year :=word_to_byte(int_to_bcd_word(2000-ObjDtInt.Year));
+ dtBcd.Month :=word_to_byte(int_to_bcd_word(ObjDtInt.Month));
+ dtBcd.Day :=word_to_byte(int_to_bcd_word(ObjDtInt.Day));
+ dtBcd.Hour :=word_to_byte(int_to_bcd_word(ObjDtInt.Hour));
+ dtBcd.Minute :=word_to_byte(int_to_bcd_word(ObjDtInt.Minute));
+ dtBcd.Sec :=word_to_byte(int_to_bcd_word(ObjDtInt.Sec));
+ ni1:=ObjDtInt.MSec div 10; // целая часть от деления (здесь 2 старших разряда мсек (=27 от 278))
+ dtBcd.MSec1 :=word_to_byte(int_to_bcd_word(ni1));
+ dtBcd.MSec2 :=shl(IN:=word_to_byte(int_to_bcd_word(ObjDtInt.MSec-ni1*10)),N:=4); //[4-7]bit-Миллисек,"единицы" [0-9] (=8 от 278))
+
+ FcIntToDt:=TimePlcBcd;   
+End_Function
+
+//======================================= >F4 ==================================
+
+(* 
+      F.4. FcDtToInt(ndt1 : dt, ObjDtInt : TDateTimeInt) : void - 
+
+*) 
+
+Function FcDtToInt : void 
+
+Title = 'FcIntToDt'
+Version: '1.0'
+Author: Konst
+Name: IntToDt
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+// ObjDtInt : TDateTimeInt; // 
+ ndt1 : dt;
+end_var //var_input
+
+var_output
+ ObjDtInt : TDateTimeInt; // 
+end_var //var_output
+
+// Локальные переменные
+var_temp
+ ni1 : int;
+ dtBcd : TDateTimeBcd;
+ TimePlcBcd at dtBcd : dt;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+ TimePlcBcd:=ndt1;
+
+ //Пересчёт BCD Byte=>Int
+ ObjDtInt.Year:=FcBcdByteToInt(ObjB:=dtBcd.Year); //+2000 ???
+ ObjDtInt.Month:=FcBcdByteToInt(ObjB:=dtBcd.Month);
+ ObjDtInt.Day:=FcBcdByteToInt(ObjB:=dtBcd.Day);
+
+ ObjDtInt.Hour:=FcBcdByteToInt(ObjB:=dtBcd.Hour); 
+ ObjDtInt.Minute:=FcBcdByteToInt(ObjB:=dtBcd.Minute);
+ ObjDtInt.Sec:=FcBcdByteToInt(ObjB:=dtBcd.Sec);
+ ObjDtInt.MSec:=FcBcdByteToInt(ObjB:=dtBcd.MSec1)*10; // единицы мсек остались во 2-й половинке dtBcd.MSec2 
+
+End_Function
+
+//======================================= >F5 ==================================
+
+(* 
+      F.5. FcDtIntToStr(ObjDtInt : TDateTimeInt) : string[22] - 
+
+      Notes! n1) 21.05.14 12:34:56.789 - полное время - string[22]
+                 123456789012345678901
+                          111111111122        
+   
+
+*) 
+
+Function FcDtIntToStr : string[22] 
+
+Title = 'FcIntToDt'
+Version: '1.0'
+Author: Konst
+Name: IntToDt
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+ ObjDtInt : TDateTimeInt; // 
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ str0 : string[4];
+ str1, str2 : string[22];
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+ str0:='0000'; // для выравнивания компонент даты до 4-х (2-х) знаков
+ str1:=''; str2:=''; // необходима инициализация для присвоения результатов строковых функций (стр. 134 (v 5.1)
+
+(*
+ //str1:=right(in:=concat(in1:=str0, in2:=i_strng(ObjDtInt.Day)), L:=2); //err
+ str1:=concat(in1:=str1, in2:='*'); // нет ошибок даже если "лишний"
+
+*)
+
+ //DD-
+ str2:=i_strng(ObjDtInt.Day);
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str1:=concat(in1:=right(in:=str2,L:=2), in2:='.');
+
+ //dd-MM-
+ str2:=i_strng(ObjDtInt.Month);
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=2), in2:='.');
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ //dd-mm-YYYY_
+ str2:=i_strng(ObjDtInt.Year);
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=2), in2:='_'); // год: 2 знака - 14. (м. делать 4 знака - 2014) 
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ //dd-mm-yyyy_HH:
+ str2:=i_strng(ObjDtInt.Hour);
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=2), in2:=':');
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ //dd-mm-yyyy_hh:MM:
+ str2:=i_strng(ObjDtInt.Minute);  
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=2), in2:=':');
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ //dd-mm-yyyy_hh:mm:SS.
+ str2:=i_strng(ObjDtInt.Sec);  
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=2), in2:='.');
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ //dd-mm-yyyy_hh:mm:ss.MMM
+ str2:=i_strng(ObjDtInt.MSec); // пока в MSec м.б. без "единиц"  
+ str2:=concat(in1:=str0, in2:=right(in:=str2,L:=len(s:=str2)-1)); //без знака и с нулями впереди
+ str2:=concat(in1:=right(in:=str2,L:=3), in2:='*'); // последний символ не исп.
+ str1:=concat(in1:=str1, in2:=str2); 
+
+ FcDtIntToStr:=str1; //'07-05-2014 16:45:34.123';
+
+End_Function
+
+//======================================= >F6 ==================================
+

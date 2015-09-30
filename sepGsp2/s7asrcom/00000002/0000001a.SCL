@@ -1,0 +1,211 @@
+
+FUNCTION_BLOCK fb_Cnvt_Com
+//Обработка общих параметров нитки
+VAR_INPUT
+    CP      :INT;
+    PORT    :INT;
+    BU      :INT;    
+END_VAR     
+
+VAR_TEMP
+    i       :INT;
+    cnt     :INT;
+    max_tmp :REAL;
+    min_tmp :REAL;
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    
+        IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[0].RComm_Fault           //недостоверность крана 0
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[0].Inv := 1;
+                cnt := cnt  +  1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[0].Inv := 0;    
+        END_IF;
+    
+        IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[1].RComm_Fault           //недостоверность крана 1  
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[1].Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[1].Inv := 0;    
+        END_IF;
+    
+        IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[2].RComm_Fault           //недостоверность крана 2
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[2].Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Crane[2].Inv := 0;    
+        END_IF;
+
+        IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.RComm_Fault                //недостоверность КРУ
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.Inv := 0;    
+        END_IF;
+
+        IF BYTE_TO_INT(db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RA) <> 0     //недостоверность Давления 
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Inv := 0;    
+        END_IF;
+   
+        IF BYTE_TO_INT(db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RA) <> 0    //недостоверность Перепада Давления 
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Inv := 0;    
+        END_IF;
+
+        IF BYTE_TO_INT(db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RA) <> 0      //недостоверность Температуры 
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Inv := 0;    
+        END_IF;
+    
+        IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Flow.RFault                    //недостоверность расхода 
+            THEN
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Flow.Inv := 1;
+                cnt := cnt + 1;
+            ELSE 
+                db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Flow.Inv := 0;    
+        END_IF;
+        
+    /////////////////////   
+    //Режим работы нитки
+    //////////////////////
+    //дист режим  +  пост сверху
+    IF NOT db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].WrkRegim.RSwRegWrk AND db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].POST.RVal 
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 0;    
+    END_IF;
+    //дист режим  +  пост снизу
+    IF NOT db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].WrkRegim.RSwRegWrk AND NOT db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].POST.RVal 
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 1;    
+    END_IF;
+    //автоматический режим  +  пост сверху
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].WrkRegim.RSwRegWrk AND  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].POST.RVal 
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 2;    
+    END_IF;
+        //автоматический режим  +  пост снизу
+    IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].WrkRegim.RSwRegWrk AND  NOT db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].POST.RVal
+ THEN
+        db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 3;    
+    END_IF;
+    //местный режим
+    IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.RCntr_State=5 
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 4;    
+    END_IF;
+    //аварийный режим
+    IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.RCntr_State=2 
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PipeWrkRegim := 5;    
+    END_IF;
+  //////////////////////  
+  //Возможность управления
+  //////////////////
+  IF db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].KRU.RCntr_State <> 5 AND                         //Блок не в местном режиме
+     NOT db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Invalid          AND                         //Есть связь
+     db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].POST.RReq            AND                         //Пост наверху
+     cnt = 0                                                                AND                         //Все данные достоверны, нет неисправностей 
+     db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].WrkRegim.RGRP = INT_TO_BOOL(db_Cmmn.GSP_Regim)   //and квитир сообщ
+     THEN
+      db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].CntrEnable := 1; 
+    ELSE
+      db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].CntrEnable := 0;
+    END_IF;
+   cnt := 0;
+   ///////////////////////
+   ////Зоны и диапазоны датчиков
+   ////////////////////
+   ///////ДАВЛЕНИЕ
+   /////////////////         
+   ////Давление в норме
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RF=0
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Zones := 0; 
+    END_IF;            
+    /////Давление в желтой зоне
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RF = 3 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RF = 4
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Zones := 1; 
+    END_IF;
+    /////Давление в красной зоне  
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RF = 2 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RF = 5
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Zones := 2; 
+    END_IF; 
+    ///Расчет Дельты Давления для скады
+    max_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RUpThres;
+    min_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.RDnThres;
+    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Press.Delta := REAL_TO_INT(ABS(max_tmp-min_tmp)) DIV 5;
+    ////////////////////
+   ///////ПЕРЕПАД ДАВЛЕНИЯ
+   /////////////////         
+   ////Перепад Давления в норме 
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RF = 0
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Zones := 0; 
+    END_IF;            
+    /////Перепад Давления в желтой зоне
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RF = 3 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RF = 4
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Zones := 1; 
+    END_IF;
+    /////Перепад Давления в красной зоне  
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RF = 2 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RF = 5
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Zones := 2; 
+    END_IF; 
+    ///Расчет Дельты Перепада Давления для скады
+    max_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RUpThres;
+    min_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.RDnThres;
+    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].PPress.Delta := REAL_TO_INT(ABS(max_tmp-min_tmp)) DIV 5;
+    ////////////////////
+   ///////ТЕМПЕРАТУРА
+   /////////////////         
+   ////Температура в норме
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RF = 0
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Zones := 0; 
+    END_IF;            
+    /////Температура в желтой зоне
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RF = 3 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RF = 4
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Zones := 1; 
+    END_IF;
+    /////Температура в красной зоне  
+    IF  db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RF = 2 OR db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RF = 5
+        THEN
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Zones := 2; 
+    END_IF; 
+    ///Расчет Дельты Температуры для скады
+    max_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RUpThres;
+    min_tmp := db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.RDnThres;
+    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[BU].PIPE[i]].Temp.Delta := REAL_TO_INT(ABS(max_tmp-min_tmp)) DIV 5;
+    
+END_FOR;
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Cnvt_Com  fb_Cnvt_Com
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

@@ -1,0 +1,163 @@
+ 
+FUNCTION_BLOCK fb_Test
+VAR_TEMP
+    // Temporary Variables
+
+END_VAR
+
+VAR
+(*CRC:WORD:=w#16#FFFF;
+CRC1:WORD;    
+data:ARRAY[0..126] OF WORD:=w#16#0207,w#16#0207; 
+tmp:WORD;
+i,j,ind:INT;   
+flag,go:BOOL;
+CRC2:WORD;
+CurrTime:S5TIME;
+in,out:BOOL;
+dw:DWORD;
+w1,w2:WORD;
+*)
+//mess_p,mess_g:udt_msg;
+go_p,go_g,go_e,empty:BOOL;
+
+m_start:BOOL;
+m_stop:BOOL;
+ack,stat:BOOL;
+ret:INT;
+A       :ARRAY[0..2] OF REAL:=1.1,2.2,3.3;
+A1      :ARRAY[0..9] OF CHAR;
+A2      :STRING[10]:='1234567890';
+A3      :ARRAY[0..2] OF REAL:=21.1,22.2,23.3;
+m1      :DWORD;
+m2      :DWORD;
+m3      :DWORD;
+tmpW    :INT;
+i       :INT;
+tmpA    :INT;
+
+pm      :INT;
+n       :INT;
+ndword  :INT;
+nbit    :INT;
+dw      :DWORD;
+nbitHigh:INT;
+nbitLow :INT;
+dwMsg   :ARRAY [0..7] OF DWORD;
+b       :BOOL;
+END_VAR
+VAR_INPUT
+    Mess1  { S7_server := 'alarm_archiv'; S7_a_type := 'alarm_s' }:DWORD;
+    Mess2  { S7_server := 'alarm_archiv'; S7_a_type := 'alarm_s' }:DWORD;
+    Mess3  { S7_server := 'alarm_archiv'; S7_a_type := 'alarm_s' }:DWORD;
+END_VAR  
+
+
+(*
+///set msg by num 0..223
+ndword      := pm   DIV 32;
+nbit        := pm   MOD 32;
+
+IF NOT INT_TO_BOOL (nbit DIV 16) THEN 
+    
+    dw := DINT_TO_DWORD(REAL_TO_DINT(2 ** nbit));
+ELSE
+    dw := SHL(in := DINT_TO_DWORD(REAL_TO_DINT(2 ** (nbit MOD 16))), n := 16);
+END_IF;
+
+dwMsg[ndword] := dwMsg[ndword] OR  dw; 
+
+//reset msg by num 0..223
+ndword      := pm   DIV 32;
+nbit        := pm   MOD 32;
+
+IF NOT INT_TO_BOOL (nbit DIV 16) THEN 
+    
+    dw := DINT_TO_DWORD(REAL_TO_DINT(2 ** nbit));
+ELSE
+    dw := SHL(in := DINT_TO_DWORD(REAL_TO_DINT(2 ** (nbit MOD 16))), n := 16);
+END_IF;
+
+dwMsg[ndword] := dwMsg[ndword] and dw; 
+*)
+//isSet
+ndword      := pm   DIV 32;
+nbit        := pm   MOD 32;
+b := DWORD_TO_BOOL(SHR(in := SHL(in := dwMsg[ndword], n := 31 - nbit), n := 31));
+
+    
+
+//nbitLow     := nbit MOD 16;
+//nbitHigh    := 32 - 16nbit MOD 16;
+//;nbit MOD 16
+//dw := SHR(in := SHL(in := dw, n := nbit)
+
+
+(*
+FOR i := 0 TO 98 BY 1 DO 
+                                                            //Set Warning        
+    IF tmpW > 5 AND NOT db_Msg.flag[0, i] THEN                            
+        fc_SetMsg(Typ := 1, P := 0, PM := i, Ind := A3);
+    END_IF;  
+                                                            //Reset Warning
+    IF tmpW < 5 AND  db_Msg.flag[0, i]    THEN                            
+        db_Msg.flag[0, i]   := 0;
+    END_IF;
+    
+END_FOR;             
+
+///////////////////////////////////////////////////
+                                                            //Set Alarm 
+IF tmpA > 5 AND NOT db_Msg.flag[0, 200] THEN   
+    fc_SetMsg(Typ := 0, P := 0, PM := 200, Ind := A3);
+END_IF;
+                                                            //Reset Alarm 
+IF tmpA < 5 AND  db_Msg.flag[0, 200]    THEN                            
+    db_Msg.flag [0, 200]   := 0;
+    db_Msg.event[0, 200]   := 0;
+END_IF;
+  
+  *)
+  (*
+    
+//события аварийные
+IF db_Mess.event[0,1] AND NOT db_Mess.flag[0,1]
+THEN
+    mess_p.type_mess:=0;//alarm
+    mess_p.p_ind:=0;
+    mess_p.pm_ind:=1;
+    mess_p.MessId:=db_Mess.MessId[0,1];
+    mess_p.ind:=3.0;
+    fb_Put_ma.idb_fb_Put_ma(mess:=mess_p);
+    db_Mess.flag[0,1]:=1;
+    
+END_IF;
+//sign признак что сообщение посланное пришло на скаду, квитировано и исчезла причина, т.е можно посылать следующее такое же сообщение
+IF  NOT db_Mess.event[0,1] AND db_Mess.flag[0,1]
+THEN 
+     IF NOT db_Mess.snd_sign[0,1]//признак выставленного сообщения
+    THEN
+    db_Mess.flag[0,1]:=0;
+    END_IF;
+END_IF;
+    
+
+*)     
+(*
+  IF go_p THEN
+    go_p:=0;
+fb_Solver.idb_fb_Solver(cnt:=idb_fb_QueueEx.cnt[0,0],CP:=0,PORT:=0,e_cnt:=idb_fb_QueueEx.cnt_e[0,0]);
+   idb_fb_QueueEx.cnt[0,0]:=idb_fb_Solver.cnt_out[0,0];
+END_IF;
+*)
+;
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Test  fb_Test
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK

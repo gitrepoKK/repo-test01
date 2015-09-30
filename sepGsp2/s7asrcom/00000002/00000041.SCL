@@ -1,0 +1,97 @@
+FUNCTION_BLOCK fb_Solver
+//¬ этом блоке принимаетс€ решение какую посылку передавать
+//ƒва варианта: 
+//----загрузка блока, при этом в блок передаютс€ две посылки с данными загрузки 
+// и не проход€т управл€ющие команды
+//----ќпрос блока двум€ посылками, если есть команды управлени€ то втора€ посылка содержит команду
+//если нет то посылку опроса
+//
+//
+//
+//
+//
+//
+//
+VAR_INPUT
+    cnt     :INT;
+    CP      :INT;
+    PORT    :INT;
+    e_cnt   :INT;
+    Stop_Snd:ARRAY[0..1, 0..1] OF BOOL;
+END_VAR
+
+VAR_OUTPUT
+    snd     :ARRAY[0..1, 0..1] OF udt_Snd;
+    cnt_out :ARRAY[0..1, 0..1] OF INT;
+    next    :ARRAY[0..1, 0..1] OF BOOL;
+END_VAR
+
+VAR_TEMP
+    i   :INT;
+END_VAR
+
+VAR
+    cnt_t       :ARRAY[0..1, 0..1, 0..2] OF INT  :=  0;
+    cnt_r       :ARRAY[0..1, 0..1] OF INT;
+    snd_dummy   :udt_snd;
+    BU1         :INT;
+    BU2         :INT;
+    download    :BOOL;
+    nPipe       :INT;
+END_VAR
+
+
+BU1 := cnt_out[CP,PORT] / 2;
+BU2 := (cnt_out[CP, PORT] - 1) / 2;
+   
+cnt_out[CP,PORT] := cnt + 1;
+
+IF cnt_out[CP,PORT]>e_cnt THEN 
+    cnt_out[CP,PORT] := 0; 
+END_IF;
+
+IF download THEN
+    db_BU.CP[db_PIPE.P[nPipe].CP].port[db_PIPE.P[nPipe].PORT].BU[db_PIPE.P[nPipe].BU].BU_Regim := 1;
+    download := 0;
+END_IF;    
+                                                                        //ѕроверка на загрузку блока   
+    IF db_BU.CP[CP].port[PORT].BU[cnt_out[CP,PORT] / 2].BU_Regim = 1 THEN
+                                                                        //‘ункци€ загрузки            
+   
+            fb_confDown.idb_fb_confDown(nIn := cnt_t[CP, PORT, cnt_out[CP,PORT] / 2],
+                               CP := CP,
+                               PORT := PORT,
+                               BU := cnt_out[CP,PORT] / 2,
+                               nPipe := nPipe);
+   
+            cnt_t[CP, PORT, cnt_out[CP,PORT] / 2] := idb_fb_confDown.nOut; 
+    END_IF;
+                                                                        //ѕерва€ или втора€ посылка            
+    IF (cnt_out[CP ,PORT] MOD 2) = 0 THEN
+        
+        snd[CP, PORT] := db_BU.CP[CP].port[PORT].BU[cnt_out[CP,PORT] / 2].snd[0];
+    ELSE
+       
+        IF  fc_is_empty(Cp := CP, Port := PORT) THEN                    //≈сть управл€юща€ команда или нет
+         
+            snd[CP ,PORT] := db_BU.CP[CP].port[PORT].BU[(cnt_out[CP, PORT] - 1) / 2].snd[1];
+        ELSE
+            fb_Get.idb_fb_Get(CP := CP, Port := PORT);
+            snd[CP, PORT] := idb_fb_Get.snd;
+        END_IF;  
+
+    END_IF;
+
+    
+
+ END_FUNCTION_BLOCK
+
+
+DATA_BLOCK  idb_fb_Solver  fb_Solver
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

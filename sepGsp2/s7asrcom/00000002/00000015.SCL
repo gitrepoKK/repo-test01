@@ -1,0 +1,13 @@
+DATA_BLOCK db_PIPE
+//Присвоение переменных
+STRUCT
+    P       :ARRAY [0..23] OF udt_Pipe;
+    P_snd   :udt_Pipe_Snd;
+END_STRUCT
+
+BEGIN
+
+
+END_DATA_BLOCK
+
+

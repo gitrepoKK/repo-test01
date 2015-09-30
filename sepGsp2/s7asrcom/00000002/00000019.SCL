@@ -1,0 +1,88 @@
+
+FUNCTION_BLOCK fb_Cnvt_Byte1
+//Разборка байтовых переменных первой посылки,  присвоение переменных
+VAR_TEMP
+    i   :INT;
+    j   :INT;
+    k   :INT;
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    FOR j := 0 TO 1 BY 1 DO
+        FOR k := 0 TO 2 BY 1 DO
+            
+            IF db_BU.CP[i].PORT[j].BU[k].rcv[0].ready THEN   
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[30], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[30], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[30], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[30], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[31], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[31], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[31], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[31], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[32], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[32], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[32], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[32], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[33], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[33], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[33], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_Close        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[33], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_Open         := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[34], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_Pow          := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[34], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_State        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[34], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RPos_Drv           := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[34], N := 0),  N := 12));;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RF               := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[35], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RA               := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[35], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PPress.RF              := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[35], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PPress.RA              := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[35], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Temp.RF                := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[36], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Temp.RA                := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[36], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].WrkRegim.RRegWrk       := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[36], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].WrkRegim.RCntrReg      := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[36], N := 0),  N := 12));
+               
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[37], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[37], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[37], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[37], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[38], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[38], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[38], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[38], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[39], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[39], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RHw_Error     := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[39], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RState        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[39], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RCntr_State   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[40], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RCntr_Close   := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[40], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RCntr_Open    := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[40], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_Close        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[40], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_Open         := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[41], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_Pow          := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[41], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_State        := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[41], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RPos_Drv           := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[41], N := 0),  N := 12));;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RF               := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[42], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RA               := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[42], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PPress.RF              := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[42], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PPress.RA              := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[32], N := 0),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Temp.RF                := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[43], N := 12), N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Temp.RA                := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[43], N := 8),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].WrkRegim.RRegWrk       := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[43], N := 4),  N := 12));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].WrkRegim.RCntrReg      := WORD_TO_BYTE(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[43], N := 0),  N := 12));
+                
+            END_IF;   
+         END_FOR;       
+    END_FOR;
+END_FOR;
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Cnvt_Byte1  fb_Cnvt_Byte1
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

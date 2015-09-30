@@ -1,0 +1,114 @@
+//Блоки и функции для работы с ФИФО буфером
+//команд
+DATA_BLOCK db_FIFO
+                                    //Данные буфера
+STRUCT
+    FIFO:ARRAY[0..1, 0..1] OF STRUCT 
+        snd:ARRAY[0..20] OF udt_Snd;
+    END_STRUCT;
+    
+    P_ind   :ARRAY [0..1, 0..1] OF INT := 0, 0, 0, 0;
+    G_ind   :ARRAY [0..1, 0..1] OF INT := 0, 0, 0, 0;
+    End     :INT := 20;   
+END_STRUCT
+
+BEGIN
+
+END_DATA_BLOCK
+                               //Проверка на пустоту  
+FUNCTION fc_is_empty : BOOL
+ 
+VAR_INPUT
+    CP  :INT; 
+    Port:INT;
+END_VAR
+
+BEGIN
+
+IF db_FIFO.G_ind[CP, Port] = db_FIFO.P_ind[CP, Port] THEN 
+    fc_is_empty := 1;
+ELSE 
+    fc_is_empty := 0; 
+END_IF;
+    
+END_FUNCTION
+
+
+                                //Положить 
+FUNCTION_BLOCK fb_Put
+
+VAR_INPUT 
+    CP  :INT;
+    Port:INT;
+    snd :udt_Snd;
+END_VAR
+
+VAR_OUTPUT
+    Of_err:BOOL;   
+END_VAR
+
+db_FIFO.FIFO[CP, PORT].snd[db_FIFO.P_ind[CP, Port]] := snd;
+db_FIFO.P_ind[CP,Port] := db_FIFO.P_ind[CP, Port] + 1;
+
+IF db_FIFO.P_ind[CP, Port] > db_FIFO.End THEN 
+    db_FIFO.P_ind[CP, Port] := 0;
+END_IF;
+
+IF db_FIFO.G_ind[CP, Port] > db_FIFO.P_ind[CP, Port] THEN
+    Of_err  :=  1;
+ELSE 
+    Of_err :=  0;
+END_IF;   
+
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_Put  fb_Put
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+
+                                //Взять 
+FUNCTION_BLOCK fb_Get
+VAR_INPUT
+    CP  :INT;
+    Port:INT;
+END_VAR 
+
+VAR_OUTPUT
+    snd     :udt_Snd;
+    Of_err  :BOOL;
+END_VAR
+
+VAR_TEMP 
+    i:INT;    
+END_VAR
+
+snd := db_FIFO.FIFO[CP, PORT].snd[db_FIFO.G_ind[CP, Port]];
+db_FIFO.G_ind[CP, Port] := db_FIFO.G_ind[CP, Port] + 1;
+
+IF db_FIFO.G_ind[CP, Port] > db_FIFO.End THEN 
+    db_FIFO.G_ind[CP, Port] := 0;
+END_IF;
+
+IF db_FIFO.G_ind[CP, Port] > db_FIFO.P_ind[CP, Port] THEN  
+    Of_err := 1;
+ELSE 
+    Of_err := 0;
+END_IF;
+   
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Get  fb_Get
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+
+
+

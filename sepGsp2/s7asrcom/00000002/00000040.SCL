@@ -1,0 +1,178 @@
+
+FUNCTION_BLOCK fb_confDown
+
+VAR_INPUT
+    nIn     :INT;
+    CP      :INT;
+    PORT    :INT;
+    BU      :INT;
+    nPipe   :INT;
+END_VAR
+
+VAR_OUTPUT
+    snd     :ARRAY [0..1, 0..1] OF udt_Snd;
+    nOut    :INT;
+END_VAR
+
+VAR
+    InitCRC         :WORD  :=  W#16#ffff;
+    CRC             :WORD;
+    nBuff           :INT;
+    dwnl_sucsess    :BOOL;
+    dwnl_flength    :DWORD;
+    tmpFLen         :DINT;
+    dwnl_data_cnt   :INT; 
+    
+    dwnl_data:ARRAY [0..9] OF STRUCT            //Массив структур буферов на передачу    
+            data        :ARRAY [0..126] OF WORD;    //Данные    
+            Length      :INT;                       //Длина
+            ready       :BOOL;                      //готовность true - готов
+    END_STRUCT;   
+
+    inf: STRUCT
+        address :WORD;
+        vers    :WORD;
+    END_STRUCT;
+        
+    dwnl_End:BOOL;      
+END_VAR 
+
+VAR_TEMP 
+    tmp_len : INT;
+    i:INT;
+    j:INT;
+END_VAR 
+
+ CASE nIn OF
+    //insert n of pipe
+            
+    0:      /// debug
+            
+            (*db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_flength := 1440;//bytes
+            
+            db_BU.CP[CP].port[PORT].BU[BU].dwnl_data_cnt := 6; //Msg
+           
+            FOR i := 0 TO db_BU.CP[CP].port[PORT].BU[BU].dwnl_data_cnt BY 1 DO
+                FOR j := 0 TO 126 BY 1 DO
+                    db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[i].data[j] := INT_TO_WORD(i*4369 + j);
+                    db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[i].ready := 1;
+                END_FOR; 
+            END_FOR;
+                
+                db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[0].data[0] := DWORD_TO_WORD(SHR(in := REAL_TO_DWORD (val1), n := 16));
+                db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[0].data[1] := DWORD_TO_WORD(REAL_TO_DWORD (val1));
+                db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[0].data[2] := INT_TO_WORD(val2);
+               *)
+    /////////////////////////////////////////////////////////////
+           // dwnl_End     := 0;
+            nBuff        := 0;
+            nOut         := 0;
+           
+            //len
+            tmpFLen := DWORD_TO_DINT(dwnl_flength);
+            //bLen := DINT_TO_INT(tmpFLen / 240);
+            //brem := DINT_TO_INT(tmpFLen - INT_TO_DINT(bLen * 240));
+            
+            
+            snd[CP, PORT].funct     := b#16#10;
+            snd[CP, PORT].adress    := db_PIPE.P[nPipe].addr;
+            snd[CP, PORT].Reg       := w#16#1389;
+            snd[CP, PORT].Ndata     := 4;
+            snd[CP, PORT].Data[0]   := DWORD_TO_WORD(SHR(in := DINT_TO_DWORD(tmpFLen), n := 16));
+            snd[CP, PORT].Data[1]   := DINT_TO_WORD(tmpFLen);
+            snd[CP, PORT].Data[2]   := inf.vers;// w#16#0001;//ver
+            snd[CP, PORT].Data[3]   := SHL(in := INT_TO_WORD(db_PIPE.P[nPipe].Ind), n := 8) OR inf.address;//w#16#0004;//nPipe //Addr
+                    
+            snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+            snd[CP, PORT].Cmd       := 2;
+            
+
+           nOut          := nIn + 1;
+            
+            CRC         := InitCRC;
+            fb_Put.idb_fb_Put(CP := CP,PORT :=PORT, snd := snd[CP, PORT]);
+            
+
+        
+        
+        1:     IF  dwnl_data[nBuff].ready THEN  
+                 (*db_BU.CP[0].port[0].BU[0].dwnl_data[0].Length := 240;
+                 db_BU.CP[0].port[0].BU[0].dwnl_data[1].Length := 240;
+                 db_BU.CP[0].port[0].BU[0].dwnl_data[2].Length := 240;
+                 db_BU.CP[0].port[0].BU[0].dwnl_data[3].Length := 240;
+                 db_BU.CP[0].port[0].BU[0].dwnl_data[4].Length := 240;
+                 db_BU.CP[0].port[0].BU[0].dwnl_data[5].Length := 240;*)
+                  (*IF nBuff[CP, PORT, BU]=0 THEN
+                  db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[nBuff[CP, PORT, BU]].Length := 254;
+                 END_IF; 
+                 
+                 IF nBuff[CP, PORT, BU]=1 THEN
+                  db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[nBuff[CP, PORT, BU]].Length := 46;
+                  END_IF;*)
+                 /////////////
+
+                 dwnl_data[nBuff].ready := 0;
+                 
+                    
+                    IF (dwnl_data[nBuff].Length MOD 2) = 0 THEN     
+                        tmp_len := dwnl_data[nBuff].Length / 2;     
+                    ELSE
+                        tmp_len := dwnl_data[nBuff].Length / 2 + 1; 
+                    END_IF; 
+                    
+                snd[CP, PORT].funct     := b#16#10;
+                snd[CP, PORT].adress    := db_PIPE.P[nPipe].addr;
+                snd[CP, PORT].Reg       := w#16#138A;
+                snd[CP, PORT].Ndata     := tmp_len;
+                snd[CP, PORT].Data      := dwnl_data[nBuff].data;
+                snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata*2);
+                snd[CP, PORT].Cmd       := 2;
+                CRC                     := fc_CRC16(crc     := CRC, 
+                                                    data    := dwnl_data[nBuff].data, 
+                                                    length  := dwnl_data[nBuff].Length
+                                                   );
+                fb_Put.idb_fb_Put(CP := CP,PORT :=PORT, snd := snd[CP, PORT]);
+                nBuff := nBuff + 1;
+                
+                dwnl_data_cnt := dwnl_data_cnt - 1;
+                
+                IF dwnl_data_cnt = 0 THEN
+                    
+                nOut           := nIn + 1;
+                END_IF;
+            END_IF;
+           
+            
+            2:  snd[CP, PORT].funct     := b#16#10; 
+                snd[CP, PORT].adress    := db_PIPE.P[nPipe].addr;
+                snd[CP, PORT].Reg       := w#16#138B;
+                snd[CP, PORT].Ndata     := 1;
+                snd[CP, PORT].Data[0]   := CRC;
+                snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+                snd[CP, PORT].Cmd       := 2;
+                
+                fb_Put.idb_fb_Put(CP := CP,PORT :=PORT, snd := snd[CP, PORT]);
+                
+                nOut         := nIn + 1;
+            
+            3:          dwnl_End     := 0;
+                        db_BU.CP[CP].port[PORT].BU[BU].BU_Regim     := 0;
+                        nBuff                        := 0;
+                        nOut                            := 0;
+                        
+            
+                
+END_CASE;
+
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_confDown  fb_confDown
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

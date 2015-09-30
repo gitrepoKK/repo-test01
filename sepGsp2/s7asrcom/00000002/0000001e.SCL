@@ -1,0 +1,237 @@
+
+FUNCTION_BLOCK fb_DownloadSnd
+//Блок для загрузки конфигурациооного файла в блок управления
+//Загрузка осуществляется поэтапно. Создается массив буферов на 10 элементов,
+//каждый элемент содержит 127 слов (максимальное количество данных, которое можно передать одной посылкой)
+//После передачи первой половины буфера выставляется признак готовности dwnl_Half_e1
+//Для заполнения этой пловины с верхнего уровня, в это время идет передача второй половины буфера.
+//После передачи второй половины буфера выставляется признак готовности dwnl_Half_e2 и передается первая половина буфера.
+//Буфера передаются при условии готовности данных ready, который ставит верхний уровень
+//В случае неготовности данных выставляется ошибка.
+//Отдельно реализованы команды сброса загрузки и рестарта блока.
+VAR_TEMP
+    tmp_dw  :DWORD;
+    i       :INT;
+    j       :INT;
+    tmp_len :INT;
+END_VAR
+
+VAR_INPUT
+    cnt_in  :INT;
+    CP      :INT;
+    PORT    :INT;
+    BU      :INT;
+END_VAR
+
+VAR_OUTPUT
+    snd     :ARRAY [0..1, 0..1] OF udt_Snd;
+    cnt_out :ARRAY [0..1, 0..1] OF INT;
+    Busy    :ARRAY [0..1, 0..1, 0..2] OF BOOL;
+END_VAR
+
+VAR
+    InitCRC         :WORD  :=  W#16#ffff;
+    CRC             :ARRAY[0..1, 0..1, 0..2] OF WORD;
+    in              :ARRAY[0..1, 0..1, 0..2, 0..2] OF BOOL;
+    out             :ARRAY[0..1, 0..1, 0..2, 0..2] OF BOOL;
+    CT              :ARRAY[0..1, 0..1, 0..2, 0..2] OF S5TIME; 
+    cnt_buff        :ARRAY[0..1, 0..1, 0..2] OF INT;
+    dwnl_sucsess    :ARRAY[0..1, 0..1, 0..2] OF BOOL;
+END_VAR 
+///////////////Для отладки
+(*FOR i := 0 TO db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data_cnt-1 BY 1 DO
+    FOR j := 0 TO 126 BY 1 do
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[i].data[j] := INT_TO_WORD(i*4369 + j);
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data[i].ready := 1;
+        (*IF DWORD_TO_DINT(db_dwnld.file_lenght)<255 THEN 
+           db_dwnld.data[i].lenght := DWORD_TO_INT(db_dwnld.file_lenght); 
+        ELSE    
+           db_dwnld.data[i].lenght := 254;
+           db_dwnld.file_lenght := DINT_TO_DWORD(DWORD_TO_DINT(db_dwnld.file_lenght)-254*(i + 1)); 
+        END_IF;
+        *)
+    END_FOR; 
+END_FOR;       
+*)
+//Инициализация таймеров для различных этапов загрузки
+
+CT[CP, PORT, BU, 0] := S_PULSE (T_NO := CP*1000 + PORT*100 + BU*10     ,  S := in[CP, PORT, BU, 0] ,  TV := T#2s  ,  Q := out[CP, PORT, BU, 0]);
+CT[CP, PORT, BU, 1] := S_PULSE (T_NO := CP*1000 + PORT*100 + BU*10 + 1 ,  S := in[CP, PORT, BU, 1] ,  TV := T#2s  ,  Q := out[CP, PORT, BU, 1]);
+CT[CP, PORT, BU, 2] := S_PULSE (T_NO := CP*1000 + PORT*100 + BU*10 + 2 ,  S := in[CP, PORT, BU, 2] ,  TV := T#10s ,  Q := out[CP, PORT, BU, 2]);
+
+CASE cnt_in OF
+    
+    //Вход в режим загрузки,посылка команды  с функцией 10 по адресу 5000, пауза 2с
+       
+    0:  snd[CP, PORT].funct     := b#16#10;                                 
+        snd[CP, PORT].adress    := db_BU.CP[CP].port[PORT].BU[BU].addr;
+        snd[CP, PORT].Reg       := w#16#1388;
+        snd[CP, PORT].Ndata     := 1;
+        snd[CP, PORT].Data[0]   := 0;
+        snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+        snd[CP, PORT].Cmd       := 2;
+        
+        in          [CP, PORT, BU, 0]   := 1;               
+        cnt_out     [CP, PORT]          := cnt_in + 1;      
+        Busy        [CP, PORT, BU]      := 0;               
+        dwnl_sucsess[CP, PORT, BU]      := 0;               
+        
+        idb_fb_StatusRcv.dwnl_sucsess[CP, PORT, BU] := 0;   
+        
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Sucsess := 0;   
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e1 := 1;   
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e2 := 1;   
+
+    //Инициализация режима загрузки и передача длины конф файла, посылка команды  с функцией 10 по адресу 5001, пауза 2с
+        
+    1:  tmp_dw := db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_flength; 
+        
+        IF NOT out[CP, PORT, BU, 0] THEN
+            snd[CP, PORT].funct     := b#16#10;
+            snd[CP, PORT].adress    := db_BU.CP[CP].port[PORT].BU[BU].addr;
+            snd[CP, PORT].Reg       := w#16#1389;
+            snd[CP, PORT].Ndata     := 2;
+            snd[CP, PORT].Data[0]   := DWORD_TO_WORD(SHR(in := tmp_dw, n := 16));
+            snd[CP, PORT].Data[1]   := DWORD_TO_WORD(tmp_dw);
+            snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+            snd[CP, PORT].Cmd       := 2;
+            
+            in      [CP, PORT, BU, 0]   := 0;
+            in      [CP, PORT, BU, 1]   := 1;
+            cnt_out [CP, PORT]          := cnt_in + 1;
+            Busy    [CP, PORT, BU]      := 0;
+            CRC     [CP, PORT, BU]      := InitCRC;
+         ELSE
+            Busy    [CP, PORT, BU]      := 1;
+         END_IF;    
+    //Загрузка файла, посылка команд  с функцией 10 по адресу 5002
+    2:  IF NOT out[CP, PORT, BU, 1] THEN 
+            in[CP, PORT, BU, 1] := 0;
+                
+                IF db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].ready THEN                      
+                    IF (db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].Length MOD 2) = 0 THEN     
+                        tmp_len := db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].Length / 2;     
+                    ELSE
+                        tmp_len := db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].Length / 2 + 1; 
+                    END_IF;  
+                
+                snd[CP, PORT].funct     := b#16#10;
+                snd[CP, PORT].adress    := db_BU.CP[CP].port[PORT].BU[BU].addr;
+                snd[CP, PORT].Reg       := w#16#138A;
+                snd[CP, PORT].Ndata     := tmp_len;
+                snd[CP, PORT].Data      := db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].data;
+                snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata*2);
+                snd[CP, PORT].Cmd       := 2;
+                CRC[CP, PORT, BU]       := fc_CRC16(crc     := CRC[CP, PORT, BU], 
+                                                    data    := db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].data, 
+                                                    length  := db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].Length
+                                                   );
+                
+                db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data_cnt                            := db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data_cnt-1;//Уменьшение количества посылок
+               
+                db_BU.CP[CP].port[PORT].BU[BU].dwnl_data[cnt_buff[CP, PORT, BU]].ready  := 0;                                             //Сброс готовности буфера на отправку
+               
+                cnt_buff[CP, PORT, BU]                                                  := cnt_buff[CP, PORT, BU] + 1;                    //Индексация буфера
+                 IF cnt_buff[CP, PORT, BU]>9 THEN 
+                    cnt_buff[CP, PORT, BU] := 0;
+                 END_IF;
+                                                                        //Признак пустого буфера
+                 IF cnt_buff[CP, PORT, BU]=5 THEN  
+                    db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e1 := 1;   
+                 END_IF;
+                 IF cnt_buff[CP, PORT, BU]=0 THEN  
+                    db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e2 := 1; 
+                 END_IF;    
+                                                                        //Конец посылки данных
+                 IF db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_data_cnt<1 THEN
+                    cnt_out[CP, PORT] := cnt_in + 1;END_IF;
+                    Busy[CP, PORT, BU] := 0;
+                 ELSE
+                                                                         //Ошибка,  данные со скады не готовы
+                    cnt_out     [CP, PORT]      := cnt_in + 1;
+                    Busy        [CP, PORT, BU]  := 1;
+                    dwnl_sucsess[CP, PORT, BU]  := 1;
+                 END_IF;
+        ELSE
+            Busy[CP, PORT, BU] := 1;
+        END_IF;    
+     
+     //Передача КС, посылка команды  с функцией 10 по адресу 5002, пауза 5с   
+    3:  snd[CP, PORT].funct     := b#16#10; 
+        snd[CP, PORT].adress    := db_BU.CP[CP].port[PORT].BU[BU].addr;
+        snd[CP, PORT].Reg       := w#16#138A;
+        snd[CP, PORT].Ndata     := 1;
+        snd[CP, PORT].Data[0]   := CRC[CP, PORT, BU];
+        snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+        snd[CP, PORT].Cmd       := 2;
+        
+        in      [CP, PORT, BU, 2]   := 1;
+        cnt_out [CP, PORT]          := cnt_in + 1;
+        Busy    [CP, PORT, BU]      := 0;
+        
+     //Рестарт, посылка команды  с функцией 10 по адресу 5007
+    4:  IF NOT out[CP, PORT, BU, 2] THEN 
+            snd[CP, PORT].funct     := b#16#10;
+            snd[CP, PORT].adress    := db_BU.CP[CP].port[PORT].BU[BU].addr;
+            snd[CP, PORT].Reg       := w#16#138F;
+            snd[CP, PORT].Ndata     := 1;
+            snd[CP, PORT].Data[0]   := 0;
+            snd[CP, PORT].Lenght    := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+            snd[CP, PORT].Cmd       := 2;
+            
+            in      [CP, PORT, BU, 2]   := 0;
+            cnt_out [CP, PORT]          := cnt_in + 1;
+            Busy    [CP, PORT, BU]      := 1;
+        ELSE
+            Busy    [CP, PORT, BU]      := 1;
+        END_IF;
+     //Для обнуления рабочих переменных
+    5:  IF dwnl_sucsess[CP, PORT, BU] OR idb_fb_StatusRcv.dwnl_sucsess[CP, PORT, BU] 
+            THEN 
+                db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Sucsess := 1;
+        END_IF;
+        
+        Busy    [CP, PORT, BU]  := 0;
+        cnt_out [CP, PORT]      := 0;
+        cnt_buff[CP, PORT, BU]  := 0;
+        
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_End     := 0;
+        db_BU.CP[CP].port[PORT].BU[BU].BU_Regim     := 0;
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e1 := 0;
+        db_BU.CP[CP].PORT[PORT].BU[BU].dwnl_Half_e2 := 0;
+        
+    //Сброс загрузки, посылка команды  с функцией 10 по адресу 5006                                            
+    100:  snd[CP, PORT].funct   := b#16#10; //сброс загрузки
+          snd[CP, PORT].adress  := db_BU.CP[CP].port[PORT].BU[BU].addr;
+          snd[CP, PORT].Reg     := w#16#138E;
+          snd[CP, PORT].Ndata   := 1;
+          snd[CP, PORT].Data[0] := 0;
+          snd[CP, PORT].Lenght  := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+          snd[CP, PORT].Cmd     := 2;
+          
+          db_BU.CP[CP].port[PORT].BU[BU].BU_Regim := 0;
+    
+    //Рестарт, посылка команды  с функцией 10 по адресу 5007                    
+    101:  snd[CP, PORT].funct   := b#16#10;
+          snd[CP, PORT].adress  := db_BU.CP[CP].port[PORT].BU[BU].addr;
+          snd[CP, PORT].Reg     := w#16#138F;
+          snd[CP, PORT].Ndata   := 1;
+          snd[CP, PORT].Data[0] := 0;
+          snd[CP, PORT].Lenght  := INT_TO_WORD(6 + snd[CP, PORT].Ndata * 2);
+          snd[CP, PORT].Cmd     := 2;
+          
+          db_BU.CP[CP].port[PORT].BU[BU].BU_Regim := 0;
+
+END_CASE;
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK  idb_fb_DownloadSnd fb_DownloadSnd
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

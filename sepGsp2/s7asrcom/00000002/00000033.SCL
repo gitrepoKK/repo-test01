@@ -1,0 +1,17 @@
+TYPE udt_Snd
+
+STRUCT
+    adress  :BYTE;
+    funct   :BYTE;
+    Reg     :WORD;
+    Ndata   :INT;
+    Data    :ARRAY[0..126] OF WORD;
+    Lenght  :WORD;
+    Cmd     :INT;// 0-опрос, 1-команда, 2-загрузка
+    Pipe_N  :INT;
+    Obj_N   :INT;
+    Par_N   :INT;
+    Bit     :INT;
+END_STRUCT
+
+END_TYPE

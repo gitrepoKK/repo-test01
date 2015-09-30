@@ -1,0 +1,142 @@
+
+DATA_BLOCK db_MsgCrane
+    // nMsg, nPipe, nCrane
+    STRUCT
+        event   :ARRAY[0..7, 0..23, 0..2] OF DWORD;
+        flag    :ARRAY[0..7, 0..23, 0..2] OF DWORD;
+        ack     :ARRAY[0..7, 0..23, 0..2] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgCru
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgPress
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgPPress
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgTemp
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgFlow
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgWorkReg
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgPipeMsg
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..7, 0..23] OF DWORD;
+        flag    :ARRAY[0..7, 0..23] OF DWORD;
+        ack     :ARRAY[0..7, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgOper
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..16, 0..23] OF DWORD;
+        flag    :ARRAY[0..16, 0..23] OF DWORD;
+        ack     :ARRAY[0..16, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgInfo
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..16, 0..23] OF DWORD;
+        flag    :ARRAY[0..16, 0..23] OF DWORD;
+        ack     :ARRAY[0..16, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgOther
+    // nMsg, nPipe
+    STRUCT
+        event   :ARRAY[0..16, 0..23] OF DWORD;
+        flag    :ARRAY[0..16, 0..23] OF DWORD;
+        ack     :ARRAY[0..16, 0..23] OF DWORD;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK
+
+DATA_BLOCK db_MsgInd
+    //nMsgInd, nPipe, nInd
+    STRUCT
+        i   :ARRAY[0..300, 0..23, 0..1] OF REAL;
+    END_STRUCT
+
+    BEGIN
+
+END_DATA_BLOCK

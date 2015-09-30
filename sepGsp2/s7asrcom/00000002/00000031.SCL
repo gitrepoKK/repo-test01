@@ -1,0 +1,89 @@
+
+TYPE udt_Pipe_snd
+STRUCT
+             //êðàíû 1,8,11      
+    Crane:ARRAY[0..2] OF STRUCT           
+        WMCntr      :BOOL;       
+    END_STRUCT;
+            //ÊÐÓ    
+    KRU:STRUCT        
+        WCntr_Switch:BOOL;
+        WMContr     :REAL;
+        WP_PID      :REAL;
+        WI_PID      :REAL;
+        WD_PID      :REAL;
+    END_STRUCT;
+
+    Press:STRUCT
+        WWr         :BOOL;
+        WUpThres    :REAL;
+        WDnThres    :REAL;
+        WUpYellow   :REAL;
+        WDnYellow   :REAL;
+        WUpRed      :REAL;
+        WDnRed      :REAL;
+    END_STRUCT;
+
+    PPress:STRUCT
+        WWr         :BOOL;
+        WUpThres    :REAL;
+        WDnThres    :REAL;
+        WUpYellow   :REAL;
+        WDnYellow   :REAL;
+        WUpRed      :REAL;
+        WDnRed      :REAL;
+    END_STRUCT;
+
+    Temp:STRUCT
+        WWr         :BOOL;
+        WUpThres    :REAL;
+        WDnThres    :REAL;
+        WUpYellow   :REAL;
+        WDnYellow   :REAL;
+        WUpRed      :REAL;
+        WDnRed      :REAL;
+    END_STRUCT;
+
+    POST:STRUCT      
+        WVal        :BOOL;
+    END_STRUCT;
+
+    FLOW:STRUCT
+        WSwitch     :BOOL;
+        WWr         :BOOL;
+        WUst        :REAL;
+        WDens       :REAL;
+        WDiamDiaf   :REAL;
+        WDiamIT     :REAL;
+        WEqvSh      :REAL;
+        WPressBar   :REAL;
+        WCo2        :REAL;
+        WNitro      :REAL;
+        WRad        :REAL;
+    END_STRUCT;
+
+    WrkRegim:STRUCT       
+        WSwRegWrk   :BOOL;
+        WGRP        :BOOL;
+        WCntrReg    :BYTE;
+    END_STRUCT;
+
+    PipeMess:STRUCT        
+        WPermAlarm  :BOOL;
+        WRstIntFault:BOOL;
+    END_STRUCT;
+
+    Times:STRUCT
+        WTime       :ARRAY[0..10] OF BYTE;
+        WYear       :INT;
+        WMonth      :INT;
+        WDay        :INT;
+        WDay_of_Week:INT;
+        WHour       :INT;
+        WMinute     :INT;
+        WSecond     :INT;
+        WMSecond    :INT;
+    END_STRUCT;
+END_STRUCT
+
+END_TYPE

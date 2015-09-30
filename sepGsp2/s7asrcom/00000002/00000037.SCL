@@ -1,0 +1,97 @@
+(* Fb254_ExecCmd.scl - выполнение команд управления.
+*)
+
+//========================================================================
+
+Function_Block fb_ExecCmd //Fb254 
+Title = 'Выполнение команд управления'
+Version: '1.0'
+Author: Konst
+Name: ExecCmd
+Family: Main
+
+Var_Temp
+ ni1 : int;
+ ndt1 : dt;
+ nr1, nr2, nr3, nr4 : Real;
+ wrd3, wrd4 : word;
+ dwrd1, dwrd2 : DWord;
+
+ 
+End_Var
+
+// Статические переменные
+Var  
+ Cycle : Real:=0.0;
+
+//==
+// Для заданий обмена через Pkw и Pzd для ЧРП1 и ЧРП2
+ JobWrPkw : struct
+  Write1 : word;
+  Write2 : word;
+  Write3 : word;
+  Write4 : word;
+ end_struct;
+ 
+ JobWrPzd : struct
+  Write1 : word;
+  Write2 : word;
+ end_struct;
+
+ lblExecStepCmd : bool; // true - выполнять очередной шаг CurrentStep \ false - отдых 
+ //Step : TStepCmd; 
+ w1,w2,w3,w4 : word;
+
+//==
+
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+ Cycle:=Cycle+0.001; // счетчик числа вызовов Fb4
+ 
+(* 
+      1. Вычисление lblExecStepCmd - признака на выполнение очередного шага HumanCmd.
+*)
+(*
+if DbCmd.JobYesCmd // if 1
+then // есть невыполненная вообще или недовыполненная HumanCmd(Job), //1
+  if DbCmd.NeedCheckPrevStepExec  //2
+  then // проверять отметку о выполнении предыдущего шага
+    if DbCmd.lblPrevStepExec  // if 3
+    then // предыдущий шаг (команда ЧРП) выполнен Dp //3
+      // наращиваем шаг  
+      if DbCmd.CurrentStep<DbCmd.NumStepInCmd // if 4
+      then // есть еще невыполненные шаги //4=====
+       DbCmd.NeedCheckPrevStepExec:=false; // на всякий, если окажемся на след. цикле
+       DbCmd.CurrentStep:=DbCmd.CurrentStep+1; // наращиваем шаг
+       lblExecStepCmd:=true; // будем выполнять следующий шаг
+       DbCmd.PacketDP:=0; // пакет для передачи по Dp еще не сформирован
+      else  //выполнен последний шаг //4
+       DbCmd.JobYesCmd:=false; // команда HumanCmd выполнена
+       lblExecStepCmd:=false; // нечего выполнять в этом цикле (до записи след. HumanCmd)
+       DbCmd.PacketDP:=0; // пакет для передачи по Dp еще не сформирован (чтобы последний пакет Dp не циклил)
+      end_if; //4 
+    else // предыдущий шаг не выполнен Dp //3
+     lblExecStepCmd:=false; // отдых, ждем выполнения пердыд. шага по Dp
+    end_if; //3 
+  else // не проверять отметку о выполнении предыдущего шага //2
+   lblExecStepCmd:=true; // будем выполнять текущий шаг 
+  end_if; //2 
+else // нет HumanCmd для выполнения //1
+  lblExecStepCmd:=false; // отдых, ждем новую HumanCmd
+end_if; //1 
+*)
+
+
+
+end_function_block
+
+
+//=====================================
+// Объявление Instance Db254 для FB254
+Data_Block idb_fb_ExecCmd fb_ExecCmd //DB254 FB254
+Begin
+End_Data_Block
+
+

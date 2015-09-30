@@ -1,0 +1,398 @@
+(* 
+      $fb_SipValve.scl - управление клапанами Sipart.
+*)
+
+Function_Block fb_SipValve //Fb255 
+Title = 'Управление клапанами Sipart'
+Version: '1.0'
+Author: Konst
+Name: SipValve
+Family: Main
+
+Var_Temp
+ lblBlowType, lblChangeDigitPQW, lblChangeMode, lblSendControlSignal : bool;   
+ i1,n1,n2,ni1 : int;
+ nr1,nr2,wLevel : real;
+ nr_RangeAoNorm, nr_Percent : real;     
+
+ ndt1 : dt;
+End_Var
+
+// Статические переменные
+Var  
+ Cycle : Real:=0.0;
+ TimePlc : dt; // текущее время ПЛК   
+ TimePlcSet : bool;
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+ nr_RangeAoNorm:=27648.0; // для пересчета в мА цифрового значения (PIW[]) AI-датчика 
+
+(*
+      0. Задание и чтение времени ПЛК
+      Note! М.б. другой алгоритм задания. А чтение используется  для отображения
+   на Op и организации задержек между командами автоматического управления.
+*)
+
+
+ //ndt1:=DT#2005-01-07-12:07:12.2;
+ if TimePlcSet
+ then // Задание времени, записаного в DbDeb1.ndt1 в формате "ММ/ДД/ГГ ЧЧ:ММ:СС" ("10/25/5 12:32:33")
+   ndt1:= TimePlc;
+   ni1:=Set_Clk(PDT := ndt1); 
+ else // Чтение времени ПЛК
+   ni1:=Read_Clk(CDT := ndt1); // чтение системного времени ПЛК в ndt1
+   TimePlc:=ndt1; // текущее время ПЛК      
+ end_If;
+
+(* 
+      1. Управление клапанами [1-3] по сливу жидкости на сепараторах СИ1, СИ2, СП.
+      Управление осуществляется полностью : в автоматическом и ручном режиме, 
+   в т.ч. дублирующее автоматическое управление краном ЭПУУ на УФР вместо клапана Sipart.
+*) 
+
+  // цикл обработки для первых трех элементов в SipValveParam[i1] : 1-СИ1, 2-СИ2, 3-СП
+  for i1:=1 to DbSipValve.numSipValve-2 do 
+
+(* 
+      1.1. Вычисление lblChangeMode - признака изменения значения ControlModeAuto.
+*) 
+ 
+   lblChangeMode:=false; // предполагаем, что режим управления не изменялся
+   if (DbSipValve.SipValveParam[i1].ControlModeAuto<>DbSipValve.SipValveParam[i1].ControlModeAuto_Prev)
+   then // значение изменилось в процессе анализа
+     lblChangeMode:=true; // режим управления изменился - надо обязательно еще раз подать упр. сигнал
+     DbSipValve.SipValveParam[i1].ControlModeAuto_Prev:=DbSipValve.SipValveParam[i1].ControlModeAuto;
+   end_if; // if (DbSipValve.SipValveParam[i1].ControlModeAuto<>..
+
+(*
+      1.2. Сброс счетчиков продувок BlowCountAll & BlowCountAuto
+*)
+  
+   if (DbSepBlow.SepBlowParam[i1].BlowCountTo0 or 
+       DbSepBlow.SepBlowParam[i1].BlowCountAll>DbSepBlow.BlowCountMax)
+   then // 
+     DbSepBlow.SepBlowParam[i1].BlowCountAll:=0;
+     DbSepBlow.SepBlowParam[i1].BlowCountAuto:=0;
+     DbSepBlow.SepBlowParam[i1].BlowCountTo0:=false; // снимаем флаг
+   end_if; // (DbSepBlow.SepBlowParam[i1].BlowCountTo0 or..
+   
+(* 
+      1.3. Вычисление значения SignalClOpW для автоматического режима слива жидкости.
+      Алгоритм : Назначаем SignalClOpW=1 ("открыть клапан") при уровне жидкости 
+   wLevel>WaterLevel_HiControl и SignalClOpW=0 ("закрыть клапан") при wLevel<WaterLevel_LoControl.
+      Присвоение значения сигнала происходит только при изменении значения (не "дрючим").
+      Дополнительно производится накопление счетчика автоматических продувок 
+   BlowCountAuto и вычисление типа продувки lblBlowType (автоматическая\ручная).
+      Note! Даём команду на открытие\закрытие клапана только если показания соотвествующего
+   датчика уровня жидксти нормальны (датчик не в "обрыве").
+*) 
+  
+   n1:=i1*5; //номер эд-та в массиве AI-датчиков для L - уровень жидкости : СИ1=5\СИ2=10\СП=15
+   lblBlowType:=false; //тип продувки - ручная (предполагаем)
+  
+   if (DbSipValve.SipValveParam[i1].ControlModeAuto) and (DbSensAI.SensAIParam[n1].lblErr<>3)
+   then // автоматич. режим управления сливом жидкости на СИ1\СИ2\СП
+     lblBlowType:=true; //тип продувки - автоматическая
+     wLevel:=DbSensAI.SensAIParam[n1].Value; // уровень жидкости i1-го сепаратора
+     if (wLevel>=DbSepBlow.SepBlowParam[i1].WaterLevel_HiControl) 
+     then // уровень воды выше WaterLevel_HiControl - клапан д.б. открыт 
+       if not(DbSipValve.SipValveParam[i1].SignalClOpW) // был закрыт - открываем 1 раз
+       then // 1-й заход (м.б. несколько из-за инертности клапана и короткого цикла программы) 
+         DbSipValve.SipValveParam[i1].SignalClOpW:=true; // уровень выше WaterLevel_HiControl - включить слив  (открыть клапан)
+         DbSepBlow.SepBlowParam[i1].BlowCountAuto:=DbSepBlow.SepBlowParam[i1].BlowCountAuto+1; 
+       end_if; // if not(DbSipValve.SipValveParam[i1].SignalClOpW) 
+     end_if; // if (DbSensAI.SensAIParam[n1].Value>=.. 
+   
+     if (wLevel<=DbSepBlow.SepBlowParam[i1].WaterLevel_LoControl) or 
+        (DbSepBlow.SepBlowParam[i1].BlowDuration_EvOver)
+     then // уровень воды ниже WaterLevel_HiControl или превышена max дл-ть продувки - клапан д.б. закрыт
+       if (DbSipValve.SipValveParam[i1].SignalClOpW) // был открыт - закрываем 1 раз
+       then // 1-й заход (м.б. несколько из-за инертности клапана и короткого цикла программы) 
+         DbSipValve.SipValveParam[i1].SignalClOpW:=false; // уровень ниже LoControl - выключить слив  (закрыть клапан))
+       end_if; // if (DbSipValve.SipValveParam[i1].SignalClOpW) 
+     end_if; // if (DbSensAI.SensAIParam[n1].Value>= 
+   end_if; // if (DbSipValve.SipValveParam[i1].ControlModeAuto) 
+
+(* 
+      1.4. Вычисление событий SignalClOpW_EvClose & SignalClOpW_EvOpen.
+      События вычисляются в 2 этапа: 1) Сначала просто по факту изменения 
+   значения SignalClOpW. 
+      2) Искусственно инициируем события при факте переключения режима управления
+   по признаку lblChangeMode, вычисленному ранее (п1.1). Этот приём позволяет 
+   обновлять посыл сигнала управления при переключении режима, даже если этот
+   сигнал не изменился. Т.о. выполняется гарантированная переподача сигнала при 
+   смене режима управления, что очень актуально при ControlObject=2, когда вместо 
+   клапана в автоматическом режиме нужно управлять, открывая и закрывая кран УФР.
+      Notes! n1) Сброс событий надо обязательно производить в блоке реагирования  
+   на события, или в конце цикла (а в цикле пользоваться).
+*) 
+
+   // 1-й проход : по факту изменения значения SignalClOpW :
+   if (DbSipValve.SipValveParam[i1].SignalClOpW<>DbSipValve.SipValveParam[i1].SignalClOpW_Prev)
+   then // значение управляющего сигнала изменилось 
+     if DbSipValve.SipValveParam[i1].SignalClOpW
+     then // событие : подача команды "открыть клапан"
+       DbSipValve.SipValveParam[i1].SignalClOpW_EvOpen:=true;
+     else // событие : подача команды "закрыть клапан"
+       DbSipValve.SipValveParam[i1].SignalClOpW_EvClose:=true;
+    end_if; // if DbSipValve.SipValveParam[i1].SignalClOpW
+    DbSipValve.SipValveParam[i1].SignalClOpW_Prev:=DbSipValve.SipValveParam[i1].SignalClOpW;
+   end_if; //if (DbSipValve.SipValveParam[i1].SignalClOpW<>..
+
+   // 2-й: Инициируем дополнительный посыл текущего управляющего сигнала при смене режима управления
+   if (lblChangeMode) 
+   then // изменился режим управления 
+     if DbSipValve.SipValveParam[i1].SignalClOpW
+     then // текущая команда "открыть клапан" => искуственно назначаем событие : "открыть клапан"
+       DbSipValve.SipValveParam[i1].SignalClOpW_EvOpen:=true;
+     else // текущая команда "закрыть клапан" => искуственно назначаем событие : "закрыть клапан"
+       DbSipValve.SipValveParam[i1].SignalClOpW_EvClose:=true;
+     end_if; // if DbSipValve.SipValveParam[i1].SignalClOpW
+   end_if; //if (lblChangeMode)
+
+(* 
+      1.4a. Копирование инфо по расходам из DbSensAI в DbSepBlow (номера элементов 
+   различаются).
+      Note! Добавлено осенью 2014г (m19)
+*) 
+
+// из DbSensAI.SensAIParam[n1]
+   n1:=(i1-1)*5+4; //номер эд-та в массиве AI-датчиков для F - расход жидкости : СИ1=4\СИ2=9\СП=14
+   DbSepBlow.SepBlowParam[i1].Flow_Instant_Current:=DbSensAI.SensAIParam[n1].Value; // уровень жидкости i1-го сепаратора
+
+   n1:=i1*5; //номер эд-та в массиве AI-датчиков для L - уровень жидкости : СИ1=5\СИ2=10\СП=15 (короткая формула - часный случай!)
+   DbSepBlow.SepBlowParam[i1].WaterLevel_Value:=DbSensAI.SensAIParam[n1].Value; // уровень жидкости i1-го сепаратора
+   
+(*
+      1.5. Обработка событий SignalClOpW_EvOpen & SignalClOpW_EvClose.
+      
+      A) Действия по событию SignalClOpW_EvOpen - начало продувки (время подачи 
+   сигнала на открытие клапана): 1) присваиваем тип продувки, определенный ранее
+   \ 2) наращиваем общий счетчик продувок \ 3) засекаем параметры на начало 
+   продувки : время & значение счетчика расхода \ 4) выставляем бит для архивации
+   "номер продувки/тип" \ 5) формируем сообщение "СП#/начало продувки номер#/
+   тип#/%открытия#" \ 6) вычисляем интервал времени с предыдущей продувкм (необяз)
+      Б) Действия по событию SignalClOpW_EvClose - ~"окончание" продувки (время подачи 
+   сигнала на закрытие клапана): 1) засекаем параметры на "конец" продувки :
+   время & значение счетчика расхода \ 2) вычисляем продолжительность продувки 
+   \ 3) выставляем бит для архивации "номер продувки/тип/продолжительность" 
+   \ 4) формируем сообщение "СП#/окончание продувки номер#/тип#/%открытия#/время#/
+   расход жидкости#" 5) старт на вычисление события по прекращению роста расхода.
+     Notes! n1) На самом деле событие SignalClOpW_EvClose не является действительным
+   окончанием продувки : это лишь начало подачи команды на закрытие клапана. Пока
+   он закрывается, жидкость продолжает сливаться. Напр., при закрытии клапана в
+   момент WaterLevel_LoControl=37.5 уровень воды снижается ~ до 36.6. 
+      Т.о. правильное окончание продувки определяется другим событием - прекраще-
+   нием роста значения расхода жидкости (накопительный расход) или прекращением 
+   его уменьшения и стабилизации (мгновенный расход).
+      n2) Пока не налажен датчик учета рахода жидкости - считаем это событие - 
+   "снятие сигнала на продувку" окончанием продувки. Впоследствии - это событие -
+   - лишь флаг для начала действий по определению правильного конца продувки.
+      n3) Всвязи со 2-м этапом искусственных событий м. "поплыть" счетчики продувок,
+   в т.ч. счетчик длительности продувок. Надо обдумать. Пока оставляем так, тем 
+   более, что истинный конец продувки не наступает сразу при SignalClOpW_EvClose=1.
+   Возможно легче установить регламент пользователю по переключению режимов управле-
+   ния и объекта управления или здесь контроль на lblChangeMode. 
+      В) Дополнительные действия : Вычисление lblSendControlSignal - признака 
+   необходимости подачи управляющего сигнала для запуска или останова продувки.
+      lblSendControlSignal=true при наличии любого из событий SignalClOpW_EvOpen\
+   SignalClOpW_EvClose.
+      Попутно вычисляется nr_Percent - процент открытия клапана при подаче на него
+   команды. Все клапаны по управлению сливом жидкости Нормально Закрытые (НЗ), по-
+   этому для них 0% - означает "Закрыть" \ Y% из диапазона [1;100] - означает от-
+   крыть на Y% (процент открытия Y% каждый раз берётся из Value_Task_Percent)
+      Notes2! n21) Изменения в алгоритме. Чтобы чётче отслеживать начало и конец 
+   продувок здесь только вычислять lblSendControlSignal, nr_Percent, Value_Send_Digit
+   (подготовиться к подаче команды). А потом по признаку lblChangeDigitPQW (об 
+   изменении значения Value_Send_Digit по сравнению с Value_Send_Digit_Prev) вы-
+   полнить перечень действий на начало и конец продувки.
+*)
+
+(* 
+      1.5.1. Вычисление lblSendControlSignal, nr_Percent, Value_Send_Digit.
+*) 
+ 
+   lblSendControlSignal:=false; // предполагаем, что сигнал не надо посылать
+   
+   //Вычисление lblSendControlSignal & nr_Percent для события SignalClOpW_EvOpen
+   if (DbSipValve.SipValveParam[i1].SignalClOpW_EvOpen)
+   then // произошло событие : подача команды "открыть клапан" 
+     lblSendControlSignal:=true; // посылаем сигнал
+     nr_Percent:=int_to_real(DbSipValve.SipValveParam[i1].Value_Task_Percent); // назначение процента при открытии клапана 
+   end_if; // if (DbSipValve.SipValveParam[i1].SignalClOpW_EvOpen)
+
+   //Вычисление lblSendControlSignal & nr_Percent для события SignalClOpW_EvClose
+    if (DbSipValve.SipValveParam[i1].SignalClOpW_EvClose)
+   then // произошло событие : подача команды "закрыть клапан" 
+     lblSendControlSignal:=true; // посылаем сигнал
+     nr_Percent:=0.0; // назначение процента при закрытии клапана
+   end_if; // if (DbSipValve.SipValveParam[i1].SignalClOpW_EvClose)
+   
+   //Вычисление Value_DigitPQW - цифрового значения [0-27648] для выхода PQW 
+   if (lblSendControlSignal)     
+   then // надо послать сигнал по управлению сливом жидкости
+     nr1:=(nr_RangeAoNorm*nr_Percent)/100.0; // тип real, чтобы не потерять точность
+     DbSipValve.SipValveParam[i1].Value_DigitPQW:=real_to_int(nr1); //int_to_word(real_to_int(nr1));
+   end_if; // if (lblSendControlSignal) 
+ 
+   //Вычисление lblChangeDigitPQW -признака изменения значения Value_DigitPQW
+   if (DbSipValve.SipValveParam[i1].Value_DigitPQW<>DbSipValve.SipValveParam[i1].Value_DigitPQW_Prev)
+   then // значение управляющего сигнала изменилось 
+     lblChangeDigitPQW:=true;
+     if (DbSipValve.SipValveParam[i1].Value_DigitPQW>0) and 
+        (DbSipValve.SipValveParam[i1].Value_DigitPQW_Prev>0)
+     then // просто изменился процент открытия Y% во время открытия (такое м.б.?) 
+       lblChangeDigitPQW:=false; // не совсем хорошо : лукавим - значение-то другое
+     end_if; //if (DbSipValve.SipValveParam[i1].Value_DigitPQW>0) and..
+     DbSipValve.SipValveParam[i1].Value_DigitPQW_Prev:=DbSipValve.SipValveParam[i1].Value_DigitPQW;
+   else  
+     lblChangeDigitPQW:=false;
+   end_if; //if (DbSipValve.SipValveParam[i1].Value_DigitPQW<>..
+
+(* 
+      1.5.2. Выполнение действий при начале продувки.
+*) 
+
+   if (lblChangeDigitPQW and DbSipValve.SipValveParam[i1].Value_DigitPQW>0)
+   then // значение управляющего сигнала изменилось и не равно 0 => "0-->1" : продувка начата
+     DbSepBlow.SepBlowParam[i1].BlowTypeAuto:=lblBlowType; // тип текущей (начинающейся) продувки
+ 
+     // Фиксирование значения уровня жидкости в начале продувки
+     DbSepBlow.SepBlowParam[i1].WaterLevel_FixAtOpen:=DbSepBlow.SepBlowParam[i1].WaterLevel_Value; 
+
+     // Накопление счетчика общего количесва продувок 
+     DbSepBlow.SepBlowParam[i1].BlowCountAll:=DbSepBlow.SepBlowParam[i1].BlowCountAll+1; 
+  
+     // Вычисление продолжительности интервала между новой начинающейся и предыдущей продувками 
+     DbSepBlow.SepBlowParam[i1].BlowTimeStart:=TimePlc; //время начала новой продувки
+     DbSepBlow.SepBlowParam[i1].BlowTimeInterval:=
+          SB_DT_DT(DT1 := DbSepBlow.SepBlowParam[i1].BlowTimeStart, 
+          DT2 := DbSepBlow.SepBlowParam[i1].BlowTimeEnd); //FC34 : DT1-DT2
+
+     // Сброс HmiBlowTimeDuration перед началом продувки (м. организовать "бегущее время" - но это накладно)
+     //  DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration:=0; // пренесено в FcCalcFlow
+     
+     // Управление сообщениями о продувках   
+     DbSepBlow.SepBlowParam[i1].BlowMessStart:=true; //вкл. сообщения "продувка включена"
+     DbSepBlow.SepBlowParam[i1].BlowMessEnd:=false; //выкл. сообщения "продувка окончена"
+
+//###Deb:
+     if (DbSensAI.SensAIParam[n1].lblSubstCalcBlow)
+     then
+       DbSensAI.SensAIParam[n1].SubstIncrement:=-1*DbSensAI.SensAIParam[n1].SubstIncrement;
+       DbSensAI.SensAIParam[n1-1].lblSubstCalc:=true;
+     end_if; // if (DbSensAI.SensAIParam[n1].lblSubstCalcBlow)
+///          
+
+   end_if; //if (lblChangeDigitPQW and DbSipValve.SipValveParam[i1].Value_DigitPQW>0)
+
+(* 
+      1.5.3. Выполнение действий при окончании продувки.
+      Note! Это не само окончание продувки - лишь сигнал на закрытие клапана (см. выше)
+*) 
+
+
+   if (lblChangeDigitPQW and DbSipValve.SipValveParam[i1].Value_DigitPQW=0)
+   then // значение управляющего сигнала изменилось и равно 0 => "1-->0" : продувка окончена
+     // Фиксирование значения уровня жидкости в конце продувки
+     DbSepBlow.SepBlowParam[i1].WaterLevel_FixAtClose:=DbSepBlow.SepBlowParam[i1].WaterLevel_Value; 
+
+     // вычисление продолжительности текущей продувки 
+     DbSepBlow.SepBlowParam[i1].BlowTimeEnd:=TimePlc; //время "окончания" продувки
+     DbSepBlow.SepBlowParam[i1].BlowTimeDuration:=
+          SB_DT_DT(DT1 := DbSepBlow.SepBlowParam[i1].BlowTimeEnd, 
+          DT2 := DbSepBlow.SepBlowParam[i1].BlowTimeStart); //FC34 : 
+      //   DbSepBlow.SepBlowParam[i1].HmiBlowTimeDuration:=   // пренесено в FcCalcFlow
+      //    (TIME_TO_DINT(DbSepBlow.SepBlowParam[i1].BlowTimeDuration))/1000; // округление до сек. (0.51=>1)
+      
+     // управление сообщениями о продувках   
+     DbSepBlow.SepBlowParam[i1].BlowMessEnd:=true; //вкл. сообщения "продувка окончена"
+     DbSepBlow.SepBlowParam[i1].BlowMessStart:=false  ; //выкл. сообщения "продувка включена"
+
+ //###Deb:
+     if (DbSensAI.SensAIParam[n1].lblSubstCalcBlow)
+     then
+       DbSensAI.SensAIParam[n1].SubstIncrement:=-1*DbSensAI.SensAIParam[n1].SubstIncrement;
+       DbSensAI.SensAIParam[n1-1].lblSubstCalc:=false;
+       DbSensAI.SensAIParam[n1-1].Value_Subst:=0.04*i1;
+
+     end_if; // if (DbSensAI.SensAIParam[n1].lblSubstCalcBlow)
+ 
+   end_if; //if (lblChangeDigitPQW and DbSipValve.SipValveParam[i1].Value_DigitPQW>0)
+ 
+(* 
+      1.6. Подача управляющего сигнала для управления сливом жидкости либо на
+   клапан, либо на кран УФР (находящийся за клапаном).
+*) 
+   
+   if (lblSendControlSignal)     
+   then // надо послать сигнал по управлению сливом жидкости
+     case DbSepBlow.SepBlowParam[i1].ControlObject of
+     1 : // управление сливом жидкости с помощью клапа Sipart
+       if not(DbSipValve.SipValveParam[i1].EmulPQW)    
+       then // эмуляция выключена - подача реальных сигналов
+         PQW[DbSipValve.SipValveParam[i1].AddrPQW]:=int_to_word(DbSipValve.SipValveParam[i1].Value_DigitPQW);
+       end_if; // if not(DbSipValve.SipValveParam[i1].EmulPQW) 
+  
+     2 : // управление сливом жидкости с помощью крана на УФР   
+       n2:=i1*4-1; //номер эд-та в массиве кранов Ppu для крана на УФР : СИ1=3\СИ2=7\СП=11 (массив начинается с "1")
+       if (DbSipValve.SipValveParam[i1].ControlModeAuto)
+       then // подаем сигнал на кран только в автоматическом режиме
+         if (DbSipValve.SipValveParam[i1].Value_DigitPQW>0)
+         then // при любом проценте открытия Value_DigitPQW>0 открываем кран полностью
+           DbKranPpu.KranPpuParam[n2].CmdKrPpu_Next:=2; //подана команда "открыть"
+         else //при Value_DigitPQW=0 закрываем кран
+           DbKranPpu.KranPpuParam[n2].CmdKrPpu_Next:=1; //подана команда "закрыть"
+         end_if; //if (DbSipValve.SipValveParam[i1].Value_DigitPQW>0)
+       end_if; //if (DbSipValve.SipValveParam[i1].ControlModeAuto)
+    end_case; //case DbSipValve.SipValveParam[i1].ControlObject
+   end_if; // if (lblSendControlSignal) 
+
+(*
+      1.7. Сброс событий, произошедших за цикл сканирования.
+      Notes! n1) Возможно перед сбросом здесь производить здесь какие-то операции по событиям,
+   напр. инициализация сообщений.
+      n2) М.б. надо будет перенести этот блок в самый конец 
+*)
+
+   DbSipValve.SipValveParam[i1].SignalClOpW_EvOpen:=false;
+   DbSipValve.SipValveParam[i1].SignalClOpW_EvClose:=false;
+
+end_for; // for i1:=1.. 
+
+(* 
+      2. Управление клапанами [4-5] 
+      Notes! n1) Клапаны [4-5] НО - Нормально Открытые 
+*) 
+
+  for i1:=4 to 5 do // обработка клапанов [4,5]
+
+   if (DbSipValve.SipValveParam[i1].Value_Task_Percent<>DbSipValve.SipValveParam[i1].Value_Task_Percent_Prev)
+   then // значение заданного процента открытия клапана ([0,100]) изменилось 
+     //Вычисление Value_DigitPQW - цифрового значения [0-27648] для выхода PQW 
+     nr_Percent:=int_to_real(100-DbSipValve.SipValveParam[i1].Value_Task_Percent); // обратная величина!!!
+     nr1:=(nr_RangeAoNorm*nr_Percent)/100.0; // тип real, чтобы не потерять точность
+     DbSipValve.SipValveParam[i1].Value_DigitPQW:=real_to_int(nr1); //int_to_word(real_to_int(nr1));
+
+     //Подача управляющего сигнала на клапан
+     if not(DbSipValve.SipValveParam[i1].EmulPQW)    
+     then // эмуляция выключена - подача реальных сигналов
+       PQW[DbSipValve.SipValveParam[i1].AddrPQW]:=int_to_word(DbSipValve.SipValveParam[i1].Value_DigitPQW);
+     end_if; // if not(DbSipValve.SipValveParam[i1].EmulPQW) 
+   
+     DbSipValve.SipValveParam[i1].Value_Task_Percent_Prev:=DbSipValve.SipValveParam[i1].Value_Task_Percent;
+   end_if; //if (DbSipValve.SipValveParam[i1].Value_DigitPQW<>..
+
+  end_for; // for i1:=1.. 
+
+end_function_block
+
+// Объявление Instance idb_fb_SipValve (Db255) для fb_SipValve (FB255)
+Data_Block idb_fb_SipValve fb_SipValve
+Begin
+End_Data_Block
+
+
+

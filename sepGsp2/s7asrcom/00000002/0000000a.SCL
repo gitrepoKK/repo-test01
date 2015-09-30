@@ -1,0 +1,123 @@
+(* 
+      DbDeb_Sol1.scl - Объявление блоков данных для отладки :
+        DbDeb1 - Отладка преобразования переменных
+ *)
+
+
+Data_Block DbDeb1
+
+Title = 'Отладка врем.'
+Author: Konst
+Name: DbDeb1
+Family: Deb1
+
+Struct
+ tmp1 : Array [0..1000] of Byte;   
+   
+ nbl1, nbl2, nbl3, nbl4, nbl5, nbl6, nbl7, nbl8, nbl9, nbl10 : Bool;
+ nbt1, nbt2, nbt3, nbt4, nbt5, nbt6, nbt7, nbt8, nbt9, nbt10 : Byte;
+ ni1, ni2, ni3, ni4, ni5, ni6, ni7, ni8, ni9, ni10 : Int;
+ nr1, nr2, nr3, nr4, nr5, nr6, nr7, nr8, nr9, nr10 : Real;
+ nw1, nw2, nw3, nw4, nw5, nw6, nw7, nw8, nw9, nw10 : Word;
+ nw11, nw12, nw13, nw14, nw15, nw16, nw17, nw18, nw19, nw20 : Word;
+ nw21, nw22, nw23, nw24, nw25, nw26, nw27, nw28, nw29, nw30 : Word;
+ ndw1, ndw2, ndw3, ndw4, ndw5, ndw6, ndw7, ndw8, ndw9, ndw10 : DWord;
+ ns1, ns2, ns3, ns4, ns5, ns6, ns7, ns8, ns9, ns10 : String[250];
+ ndt1, ndt2, ndt3, ndt4, ndt5, ndt6, ndt7, ndt8, ndt9, ndt10 : DT;
+   
+ deb1, deb2, deb3, deb4, deb5, deb6, deb7, deb8, deb9, deb10 : Int;
+ deb11, deb12, deb13, deb14, deb15, deb16, deb17, deb18, deb19, deb20 : Int;
+
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+End_Data_Block
+
+//==================================>2======================================
+(*
+  DbCpBufSend - Исходные области для передачи данных
+  
+   Области передачи данных для протокола Modbus RTU описаны в структуре mSendPar (см. ниже)
+   Каждый элемент массива этой структуры служит определенными заготовками для разных команд
+  Modbus, определяемыми разными номерами функций Modbus и соответствующих им параметрами 
+  области передавемых данных.
+*)
+
+Data_Block DbCpBufSend
+Title= 'Области передачи данных'
+Author: Konst
+Family: Main
+
+Struct
+ mSendPar : Array[1..6] Of Struct
+                  DevAddr : Byte;
+                  FuncCode : Byte;
+                  DataStartAdr : Word;
+                  DataKol : Int;    
+                 End_Struct;   
+  
+End_Struct // Db
+
+Begin // Раздел назначения нач. значений
+
+// Чтение значений из bitArea БУ 
+ mSendPar[1].DevAddr:=b#16#02;
+ mSendPar[1].FuncCode:=b#16#01;
+ mSendPar[1].DataStartAdr:=w#16#64;  // 64h=100d было w#16#03
+ mSendPar[1].DataKol:=75;
+
+// Чтение значений из intArea БУ 
+ mSendPar[2].DevAddr:=b#16#02;
+ mSendPar[2].FuncCode:=b#16#02;
+ mSendPar[2].DataStartAdr:=w#16#3e8; // 3e8h=1000d
+ mSendPar[2].DataKol:=240;  // 60 параметров * 4
+
+// Чтение значений из floatArea БУ 
+ mSendPar[3].DevAddr:=b#16#02;
+ mSendPar[3].FuncCode:=b#16#03;
+ mSendPar[3].DataStartAdr:=w#16#7d0; // 7d0h=2000d
+ mSendPar[3].DataKol:=86;
+
+
+// для чтения параметра №10 "Шлейф №3 : Пост управления ТОУ" - пример Малыхина
+ mSendPar[4].DevAddr:=b#16#04;
+ mSendPar[4].FuncCode:=b#16#01;
+ mSendPar[4].DataStartAdr:=w#16#6D;  // 6Dh=109d
+ mSendPar[4].DataKol:=1;
+
+// Закодировано 6 символов для тестового посыла по ASCII : "=Cp441"
+ mSendPar[5].DevAddr:=b#16#3D; //  "=" : 61d=3Dh 
+ mSendPar[5].FuncCode:=b#16#43; // "C" : 67d=43h
+ mSendPar[5].DataStartAdr:=w#16#7034; // "p4" - "p" : 112d=70h \ "4" : 52d=34h
+ mSendPar[5].DataKol:=13361; // "41" - "4" : 52d=34h \ "1" : 49d=31h => 3431h=13361d
+
+// Посылка на БУ по протоколу ASCII : если послать "$A0M" (и Crc для ASCii), то в ответе : "!".. -норма \ "?".. - ошибка
+// "$" : 36d=24h \ "A" : 65d=41h \ "0" : 48d=30h \ "M" : 77d=4Dh \ 304Dh=12365d
+ mSendPar[6].DevAddr:=b#16#00;
+ mSendPar[6].FuncCode:=b#16#00;
+ mSendPar[6].DataStartAdr:=w#16#2441;  // № 10
+ mSendPar[6].DataKol:=12365;
+
+
+End_Data_Block 
+
+//==================================>3======================================
+
+Data_Block DbCpBufRcv
+Title= 'Области приема данных'
+Author: Konst
+Family: Main
+
+Struct
+ RcvDataFloat : Array[1..100] Of Word;  
+ RcvDataBool : Array[1..100] Of Bool;  
+ RcvDataInt : Array[1..100] Of Byte;  
+  
+End_Struct // Db
+
+Begin // Раздел назначения нач. значений
+End_Data_Block 
+
+//==================================>4======================================
+

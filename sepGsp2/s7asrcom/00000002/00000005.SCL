@@ -1,0 +1,766 @@
+(* 
+      Fb252_KranPPu.scl - циклическая работа с кранами ЭППУ.
+*)
+
+//========================================================================
+
+Function_Block fb_KranPpu  //Fb252 
+Title = 'Работа с кранами ЭППУ'
+Version: '1.0'
+Author: Konst
+Name: ParScan
+Family: Main
+
+Var_Temp
+ nbl1, nbl2, lblOpOk : Bool;   
+ i1, it1, ni1 : int;
+ ndt1 : DT;
+End_Var
+
+// Статические переменные
+Var  
+ Cycle : Real:=0.0;
+ 
+ TmOperStartImpulse : array[1..15] of bool;
+ TmOperState : array[1..15] of int;
+ TmOperResult : array[1..15] of s5time;
+ lblDopWork : array[1..15] of bool; // 1- доп. обработка по крану нужна \ 0 - не нужна
+
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Предподготовка.
+*)
+  for i1:=1 to DbKranPpu.numKrPpu do
+(*
+      1.1. Синхронизация значений уставок для очередного крана между ПЛК и 
+   ВУ по значению HmiSyncTimers : 0-не проводить \ 1-синхрПЛК=>ВУ \ 2-синхрВУ=>ПЛК.
+*)
+
+   case DbKranPpu.KranPpuParam[i1].HmiSyncTimers of
+   1 : // синхронизация ПЛК=>ВУ- копия из рабочих тегов ПЛК в теги для корректировки уставок на ВУ: 
+     DbKranPpu.KranPpuParam[i1].HmiTmStrag_Value:=TIME_TO_DINT(S5TIME_TO_TIME(DbKranPpu.KranPpuParam[i1].TmStrag_Value));
+     DbKranPpu.KranPpuParam[i1].HmiTmFullClose_Value:=TIME_TO_DINT(S5TIME_TO_TIME(DbKranPpu.KranPpuParam[i1].TmFullClose_Value));
+     DbKranPpu.KranPpuParam[i1].HmiTmFullOpen_Value:=TIME_TO_DINT(S5TIME_TO_TIME(DbKranPpu.KranPpuParam[i1].TmFullOpen_Value));
+     DbKranPpu.KranPpuParam[i1].HmiTmDogim_Value:=TIME_TO_DINT(S5TIME_TO_TIME(DbKranPpu.KranPpuParam[i1].TmDogim_Value));
+
+     DbKranPpu.KranPpuParam[i1].HmiSyncTimers:=0; // отметка: синхронизировано,больше не проводить
+  
+   2 : // синхронизация ВУ=>ПЛК- копия из тегов для корректировки уставок на ВУ в рабочие теги ПЛК:   
+ 
+     DbKranPpu.KranPpuParam[i1].TmStrag_Value:=TIME_TO_S5TIME(DINT_TO_TIME(DbKranPpu.KranPpuParam[i1].HmiTmStrag_Value));
+     DbKranPpu.KranPpuParam[i1].TmFullClose_Value:=TIME_TO_S5TIME(DINT_TO_TIME(DbKranPpu.KranPpuParam[i1].HmiTmFullClose_Value));
+     DbKranPpu.KranPpuParam[i1].TmFullOpen_Value:=TIME_TO_S5TIME(DINT_TO_TIME(DbKranPpu.KranPpuParam[i1].HmiTmFullOpen_Value));
+     DbKranPpu.KranPpuParam[i1].TmDogim_Value:=TIME_TO_S5TIME(DINT_TO_TIME(DbKranPpu.KranPpuParam[i1].HmiTmDogim_Value));
+
+     DbKranPpu.KranPpuParam[i1].HmiSyncTimers:=0; // отметка: синхронизировано,больше не проводить
+
+   end_case;
+
+(*
+      1.2. Анализ на ручное директивное управление.
+*)
+
+    if DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush
+    then // ручное директивное управление включено - прекращаем операции
+      DbKranPpu.KranPpuParam[i1].OperStep:=0;  // следующий шаг операции
+      DbKranPpu.KranPpuParam[i1].Oper:=0;  // операций по крану больше нет
+      // ? надо обнулять CmdKrPpu_Next=0 - 16.10.13
+
+      DbKranPpu.KranPpuParam[i1].KrToCloseW:=0; // снятие источника дискрета закрытия в операциях (для профилактики)
+      DbKranPpu.KranPpuParam[i1].KrToOpenW:=0; // снятие источника дискрета открытия в операциях (для профилактики)
+
+      // Подача дискрета закрытия из KrToCloseW и дискрета открытия из KrToOpenW
+      if DbKranPpuAdr.KranPpuEmul
+      then // эмуляция сигналов кранов : назначаем значения в DbKranPpuAdr..Value
+        DbKranPpuAdr.KranPpuAdrParam[i1,5].Value:=DbKranPpu.KranPpuParam[i1].KrToCloseW_HandPush;
+        DbKranPpuAdr.KranPpuAdrParam[i1,6].Value:=DbKranPpu.KranPpuParam[i1].KrToOpenW_HandPush;
+      else // Подача сигналов на реальных выходы кранов
+        // Подача дискрета закрытия (5-й элемент всегда)
+        Q[DbKranPpuAdr.KranPpuAdrParam[i1,5].adr1,
+          DbKranPpuAdr.KranPpuAdrParam[i1,5].adr2]:=DbKranPpu.KranPpuParam[i1].KrToCloseW_HandPush;
+        // Подача дискрета открытия (6-й элемент всегда)
+        Q[DbKranPpuAdr.KranPpuAdrParam[i1,6].adr1,
+          DbKranPpuAdr.KranPpuAdrParam[i1,6].adr2]:=DbKranPpu.KranPpuParam[i1].KrToOpenW_HandPush;
+      end_if; // if DbKranPpuAdr.KranPpuEmul
+      
+    end_if; // if DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush
+
+  end_for; // for i1:=1.. 
+
+(*
+      2. Чтение значений входных сигналов для кранов ЭППУ. Определение 
+   состояния StateByClOp "по концевикам".
+*)
+
+  for i1:=1 to DbKranPpu.numKrPpu do
+
+(*
+      2.1. Чтение значений входных сигналов для кранов ЭППУ.
+*)
+
+   if DbKranPpuAdr.KranPpuEmul
+   then // эмуляция сигналов кранов : берём значения из DbKranPpuAdr..Value
+     DbKranPpu.KranPpuParam[i1].KrClose:=DbKranPpuAdr.KranPpuAdrParam[i1,1].Value;
+     DbKranPpu.KranPpuParam[i1].KrOpen:=DbKranPpuAdr.KranPpuAdrParam[i1,2].Value;
+     DbKranPpu.KranPpuParam[i1].CC_Close:=DbKranPpuAdr.KranPpuAdrParam[i1,3].Value;
+     DbKranPpu.KranPpuParam[i1].CC_Open:=DbKranPpuAdr.KranPpuAdrParam[i1,4].Value;
+     DbKranPpu.KranPpuParam[i1].KrToCloseR:=DbKranPpuAdr.KranPpuAdrParam[i1,5].Value;
+     DbKranPpu.KranPpuParam[i1].KrToOpenR:=DbKranPpuAdr.KranPpuAdrParam[i1,6].Value;
+   else // чтение реальных сигналов кранов
+     DbKranPpu.KranPpuParam[i1].KrClose:=I[DbKranPpuAdr.KranPpuAdrParam[i1,1].adr1,
+                                           DbKranPpuAdr.KranPpuAdrParam[i1,1].adr2];
+     DbKranPpu.KranPpuParam[i1].KrOpen:=I[DbKranPpuAdr.KranPpuAdrParam[i1,2].adr1,
+                                          DbKranPpuAdr.KranPpuAdrParam[i1,2].adr2];
+     DbKranPpu.KranPpuParam[i1].CC_Close:=I[DbKranPpuAdr.KranPpuAdrParam[i1,3].adr1,
+                                                    DbKranPpuAdr.KranPpuAdrParam[i1,3].adr2];
+     DbKranPpu.KranPpuParam[i1].CC_Open:=I[DbKranPpuAdr.KranPpuAdrParam[i1,4].adr1,
+                                                   DbKranPpuAdr.KranPpuAdrParam[i1,4].adr2];
+     DbKranPpu.KranPpuParam[i1].KrToCloseR:=Q[DbKranPpuAdr.KranPpuAdrParam[i1,5].adr1,
+                                              DbKranPpuAdr.KranPpuAdrParam[i1,5].adr2];
+     DbKranPpu.KranPpuParam[i1].KrToOpenR:=Q[DbKranPpuAdr.KranPpuAdrParam[i1,6].adr1,
+                                             DbKranPpuAdr.KranPpuAdrParam[i1,6].adr2];
+   end_if; // if DbKranPpuAdr.KranPpuEmul
+
+(*
+      2.2. Анализ на изменение значений DI-сигналов по сравнению с предущим циклом сканирования.
+      Notes! n1) Сброс событий надо обязательно производить в блоке реагирования на события
+   или в конце цикла (а в цикле пользоваться).
+      n2) Для корректности надо инициализировать _PrevVal. Напр., если все сделать false в Ob100
+   (кстати false и так по умолчанию без инициализации), то увидим всё, что открытое - м.б. это и хорошо.
+*) 
+
+   // Изменение концевика закрытия KrClose
+   if DbKranPpu.KranPpuParam[i1].KrClose<>DbKranPpu.KranPpuParam[i1].KrClose_PrevVal
+   then // значение сигнала для дискрета закрытия изменилось в процессе анализа
+     if DbKranPpu.KranPpuParam[i1].KrClose
+     then // событие : "концевик закрытия замкнулся" (0->1)
+       DbKranPpu.KranPpuParam[i1].KrClose_Ev01:=1;
+     else // событие : "концевик закрытия разомкнулся" (1->0)
+       DbKranPpu.KranPpuParam[i1].KrClose_Ev10:=1;
+     end_if; // if DbKranPpu.KranPpuParam[i1].KrClose
+     DbKranPpu.KranPpuParam[i1].KrClose_PrevVal:=DbKranPpu.KranPpuParam[i1].KrClose;
+   end_if; // if DbKranPpu.KranPpuParam[i1].KrClose<>..
+
+   // Изменение концевика открытия KrOpen
+   if DbKranPpu.KranPpuParam[i1].KrOpen<>DbKranPpu.KranPpuParam[i1].KrOpen_PrevVal
+   then // значение сигнала для дискрета открытия изменилось в процессе анализа
+     if DbKranPpu.KranPpuParam[i1].KrOpen
+     then // событие : "концевик открытия замкнулся" (0->1)
+       DbKranPpu.KranPpuParam[i1].KrOpen_Ev01:=1;
+     else // событие : "концевик открытия разомкнулся" (1->0)
+       DbKranPpu.KranPpuParam[i1].KrOpen_Ev10:=1;
+     end_if; // if DbKranPpu.KranPpuParam[i1].KrOpen
+     DbKranPpu.KranPpuParam[i1].KrOpen_PrevVal:=DbKranPpu.KranPpuParam[i1].KrOpen;
+   end_if; // if DbKranPpu.KranPpuParam[i1].KrOpen<>..
+
+(*
+      2.3. Определение состояния StateByClOp "по концевикам" и вычисление значений
+   признаков HmiErrClOp00 (оба концевика в "0" (разомкнуты)), HmiErrClOp11 (оба 
+   концевика в "1" (замкнуты))
+      Notes! n1) В комментариях для краткости : "Cl+" - концевик закрытия замкнут \ "Cl-" - концевик 
+   закрытия разомкнут \ "Op+" - концевик открытия замкнут \ "Op-" - концевик открытия разомкнут
+      n2) Попутное вычисление флагов ClOp00, ClOp11 и частичное для признака State(только 1,2)
+      n3) Правильно ли частичная обработка State. М.б. надо начальное значение?
+
+  HmiErrClOp00 : bool; // метка : 1- оба концевика в 0 (разомкнуты) \ 0- нет (ClOp - Close-Open) 
+  HmiErrClOp11 : bool; // метка : 1- оба концевика в 1 (замкнуты) \ 0- нет 
+
+*)
+   
+   // промежуточные переменные для вычисления ClOp00, ClOp11
+   nbl1:=false; // для HmiErrClOp00
+   nbl2:=false; // для HmiErrClOp11
+ 
+   if DbKranPpu.KranPpuParam[i1].KrClose // Cl+ (концевик закрытия замкнут)
+   then
+    if DbKranPpu.KranPpuParam[i1].KrOpen  // Op+
+    then 
+     DbKranPpu.KranPpuParam[i1].StateByClOp:=4; // неисправность - замкнуты оба концевика (Cl+ Op+)
+     nbl2:=true;
+    else
+     DbKranPpu.KranPpuParam[i1].StateByClOp:=1; // кран закрыт - замкнут только концевик закрытия (Cl+ Op-)
+    end_if; // if DbKranPpu.KranPpuParam[i1].KrOpen
+   else // if DbKranPpu.KranPpuParam[i1].KrClose  (Cl-)
+    if DbKranPpu.KranPpuParam[i1].KrOpen  // Op+
+    then 
+     DbKranPpu.KranPpuParam[i1].StateByClOp:=2; // кран открыт - замкнут только концевик открытия (Cl- Op+)
+    else 
+     DbKranPpu.KranPpuParam[i1].StateByClOp:=3; // промежуточное сотояние - оба концевика разомкнуты (Cl- Op-)
+     nbl1:=true; 
+     end_if; // if DbKranPpu.KranPpuParam[i1].KrOpen
+   end_if; // if DbKranPpu.KranPpuParam[i1].KrClose
+
+   // присваиваем 1 раз
+   DbKranPpu.KranPpuParam[i1].HmiErrClOp00:=nbl1; // метка : 1- оба концевика в 0 (разомкнуты) \ 0- нет
+   DbKranPpu.KranPpuParam[i1].HmiErrClOp11:=nbl2; // метка : 1- оба концевика в 1 (замкнуты) \ 0- нет
+
+  end_for; // i1:=1.. 
+
+(*
+      3. Определение l.  lblDopWork[i1] \ State и дополнительных флагов
+*)
+
+(*
+      3.1. Определение lblDopWork[i1] - необходимости продолжения выполнения дополнительных 
+   операций с кранами.
+*)
+ 
+  for i1:=1 to DbKranPpu.numKrPpu do
+
+   lblDopWork[i1]:=false; // предполагаем что дальше обрабатывать не надо
+
+   if DbKranPpu.KranPpuParam[i1].Oper<>0
+   then // есть незаконченная операция 
+    lblDopWork[i1]:=true; // работаем дальше - есть невыполненные операции
+   
+   //анализ на появление новой команды :
+   else // незаконченных операций нет, но м.б. новая команда 
+    if DbKranPpu.KranPpuParam[i1].CmdKrPpu<>DbKranPpu.KranPpuParam[i1].CmdKrPpu_Next // ? не учел CmdKrPpu_Next=0 - 16.10.13
+    then // новая команда для крана (легальная, непротиворечивая, м.б. с приоритетом)
+    
+    // проверяем легальность новой команды  
+  // Напримен, зачем открывать , если кран открыт...
+    //.. 
+ 
+    // команда легальна
+     DbKranPpu.KranPpuParam[i1].CmdKrPpuLegal:=true; // команда легальна
+     DbKranPpu.KranPpuParam[i1].CmdKrPpu:=DbKranPpu.KranPpuParam[i1].CmdKrPpu_Next; // теперь она уже в работе
+     DbKranPpu.KranPpuParam[i1].Oper:=DbKranPpu.KranPpuParam[i1].CmdKrPpu; // совпадают по структуре значений
+     DbKranPpu.KranPpuParam[i1].CmdKrPpu_Next:=0; //13.11.13
+     // ? надо обнулять CmdKrPpu_Next=0 - 16.10.13
+
+    // подготовка к 1-му этапу операции 
+     case DbKranPpu.KranPpuParam[i1].Oper of
+      0 :  // м. расценить как прекращение тек. операций
+           DbKranPpu.KranPpuParam[i1].OperStep:=0; 
+           lblDopWork[i1]:=false; // пока не обрабатываем (м.б. будет доп. операция - снять выходы)
+      1 :  // Новая операция - Закрытие крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=11; // 11 - 1-я из OperStep по закрытию крана  (1Х)
+           lblDopWork[i1]:=true; // работаем дальше - начинаем закрытие крана
+      2 :  // Новая операция - Открытие крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=21; // 21 - 1-я из OperStep по открытию крана  (2Х)
+           lblDopWork[i1]:=true; // работаем дальше - начинаем открытие крана
+     end_case; // case DbKranPpu.KranPpuParam[i1].Oper  
+    end_if; // if DbKranPpu.KranPpuParam[i1].CmdKrPpu<>..
+   end_if; // if DbKranPpu.KranPpuParam[i1].Oper<>0
+///
+
+(*
+      3.2. Вычиление значения состояния крана State.
+*)
+
+   if (DbKranPpu.KranPpuParam[i1].State<>21) and (DbKranPpu.KranPpuParam[i1].State<>22)
+   then // не было состояний 21,22 по предыдущему циклу 
+     DbKranPpu.KranPpuParam[i1].State:=0; // состояние "не определено" (для начала)
+   end_if; // if (DbKranPpu.KranPpuParam[i1].State<>21) and..
+
+   case DbKranPpu.KranPpuParam[i1].StateByClOp of
+    1 : DbKranPpu.KranPpuParam[i1].State:=1; // кран закрыт
+    2 : DbKranPpu.KranPpuParam[i1].State:=2; // кран закрыт  
+    3 : // концевики разомкнуты (ClOp00)
+        if DbKranPpu.KranPpuParam[i1].OperStep>20
+        then // выполняются операции по открытию крана
+          DbKranPpu.KranPpuParam[i1].State:=4; // кран открывается
+        else // нет операций или закрытие
+          
+          if DbKranPpu.KranPpuParam[i1].OperStep=0
+          then // нет операций -> причина в : HandPush или NotSancMove
+           
+            if DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush
+            then // "ручное" управление
+              if DbKranPpu.KranPpuParam[i1].KrToCloseW_HandPush
+              then // включен HandPush и есть сигнал на закрытие
+                DbKranPpu.KranPpuParam[i1].State:=11; // HandPush : кран закрывается
+              else
+                if DbKranPpu.KranPpuParam[i1].KrToOpenW_HandPush
+                then // включен HandPush и есть сигнал на открытие
+                  DbKranPpu.KranPpuParam[i1].State:=12; // HandPush : кран открывается
+                else // HandPush - нет управляющих сигналов  
+                  DbKranPpu.KranPpuParam[i1].State:=13; // HandPush : кран "застыл посередине" - нет управляющих сигналов
+                end_if; // if DbKranPpu.KranPpuParam[i1].KrToOpenW_HandPush
+              end_if; // if DbKranPpu.KranPpuParam[i1].KrToCloseW_HandPush
+              else // несанкционированное открытие с ТЛ (ТехЛинии)   
+              // События : присваиваем значение State только в 2-х случаях (чтобы не 
+              // перезатереть "пойманный процесс" после момента отхода одного из концевиков 
+              if (DbKranPpu.KranPpuParam[i1].KrClose_Ev10) or (DbKranPpu.KranPpuParam[i1].State=22)
+              then // "концевик закрытия разомкнулся" (1->0)
+                DbKranPpu.KranPpuParam[i1].State:=22; // NotSancMove : кран открывается
+              end_if; // if DbKranPpu.KranPpuParam[i1].KrClose_Ev10..
+              if DbKranPpu.KranPpuParam[i1].KrOpen_Ev10 or (DbKranPpu.KranPpuParam[i1].State=21)
+              then // "концевик открытия разомкнулся" (1->0)
+                DbKranPpu.KranPpuParam[i1].State:=21; // NotSancMove : кран закрывается
+              end_if; // if DbKranPpu.KranPpuParam[i1].KrOpen_Ev10..
+            end_if; // if DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush
+
+          else // выполняются операции по закрытию крана (1x - операции закрытия : <>0 & <20)
+            DbKranPpu.KranPpuParam[i1].State:=3; // кран открывается
+          end_if; // if DbKranPpu.KranPpuParam[i1].OperStep=0
+  
+        end_if; // if DbKranPpu.KranPpuParam[i1].OperStep>20
+        
+    4 : DbKranPpu.KranPpuParam[i1].State:=5; // неисправность : оба концевика замкнуты (Clop11)
+   end_case; // case DbKranPpu.KranPpuParam[i1].StateByClOp
+
+(*
+      3.3. Вычиcление признаков HmiKrEnableToClose\HmiKrEnableToOpen - доступности 
+   крана на закрытие\открытие с ВУ.
+      Notes! n1) Закрытие с ВУ доступно при значениях state : 0(неопределено) \ 
+   2(открыт)\ 21,22 (NotSancMove)\\а также если нет ЦЦ закрытия
+      n2) Открытие с ВУ доступно при значениях state : 0(неопределено)\ 1(закрыт)\
+   21,22 (NotSancMove)\\а также если нет ЦЦ открытия      
+      n3) Дополнительно: не разрешаем любое управление при CmdKrPpuHandPush
+      n4) М.б. надо разрешать и для state=5 (неисправность) - сейчас это только 
+   ClOp11 - а это, по утв. Язева, во-во-во-возможно
+*)
+
+   DbKranPpu.KranPpuParam[i1].HmiKrEnableToClose:=false;   
+   DbKranPpu.KranPpuParam[i1].HmiKrEnableToOpen:=false;   
+
+   case DbKranPpu.KranPpuParam[i1].State of
+    0,21,22 : DbKranPpu.KranPpuParam[i1].HmiKrEnableToClose:=true;   
+              DbKranPpu.KranPpuParam[i1].HmiKrEnableToOpen:=true;   
+    1       : DbKranPpu.KranPpuParam[i1].HmiKrEnableToOpen:=true;   
+    2       : DbKranPpu.KranPpuParam[i1].HmiKrEnableToClose:=true;   
+   end_case;
+   
+   // Дополнительно: не разрешаем любое управление при CmdKrPpuHandPush
+   if DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush
+   then // "ручное" управление - не разрешаем управлять
+     DbKranPpu.KranPpuParam[i1].HmiKrEnableToClose:=false;   
+     DbKranPpu.KranPpuParam[i1].HmiKrEnableToOpen:=false;   
+   end_if; // if DbKranPpu.KranPpuParam[i1].OperStep=0
+
+(*
+      3.4. Вычиcление признаков HmiErrCC_Close\HmiErrCC_Open нарушения Целостности 
+   Цепи Закрытия\Открытия. Уточнение HmiKrEnableToClose\HmiKrEnableToOpen при наличии
+   нарушения ЦЦ.
+      Основные сведения по ЦЦ. ЦЦ нужна для контроля, что пройдет сигнал управления : 
+   напр. для подачи закрытия крана важно, чтобы ЦЦ Закрытия=1 (ЦЦЗ=1). При подаче дискрета
+   закрытия на DO ЦЦЗ рвётся (ЦЦЗ=0), а при выключении DO Закрытия опять восстанав-
+   ливается (ЦЦЗ=1). Т.о. наличие ЦЦЗ=1 важно в "статике" - когда кран открыт, для уверен-
+   ности в том, что управляющий сигнал на закрытие сработает. Аалогично ЦЦО=1 важно для 
+   возможности открытия крана, если он закрыт.
+      Алгоритм работы с сигнами ЦЦ (на примере ЦЦЗ). Анализируем наличие ЦЦЗ если нет 
+   выполняемых операций (а лучше сразу только, если KrToCloseW=0). Если  ЦЦЗ нарушена 
+   (ЦЦЗ=0), то HmiErrCC_Close=1 и запрещаем кн. [Закрыть] на ВУ : HmiKrEnableToClose=0.
+   Разрыв ЦЦЗ в процессе закрытия  и её восстановление при окончании не пасём : а) Состояние
+   ЦЦЗ при закрытии не важно. Если DO закрытия "оборвался в процессе", то будет ошибка по опе-
+   рации "закрытие крана" (по таймеру концевик закрытия не сработает). б) Восстановление
+   после закрытия - это тот же контроль ЦЦЗ в статике - его и так делаем по алгоритму. 
+ *)
+ 
+   // Вычиcление  HmiErrCC_Close
+   if DbKranPpu.KranPpuParam[i1].KrToCloseW=0
+   then // источник для DO-закрытия =0 (DO закрытия нет (не последует, не планируется))
+     DbKranPpu.KranPpuParam[i1].HmiErrCC_Close:=not(DbKranPpu.KranPpuParam[i1].CC_Close);
+   end_if; // if DbKranPpu.KranPpuParam[i1].KrToCloseW 
+
+   // Вычиcление  HmiErrCC_Open
+   if DbKranPpu.KranPpuParam[i1].KrToOpenW=0
+   then // источник для DO-открытия =0 (DO открытия нет (не последует, не планируется))
+     DbKranPpu.KranPpuParam[i1].HmiErrCC_Open:=not(DbKranPpu.KranPpuParam[i1].CC_Open);
+   end_if; // if DbKranPpu.KranPpuParam[i1].KrToOpenW 
+     
+   if DbKranPpu.KranPpuParam[i1].HmiErrCC_Close
+   then // нарушена ЦЦ закрытия - запрещаем возможность закрытия
+     DbKranPpu.KranPpuParam[i1].HmiKrEnableToClose:=false;   
+   end_if; // if DbKranPpu.KranPpuParam[i1].HmiErrCC_Close 
+ 
+   if DbKranPpu.KranPpuParam[i1].HmiErrCC_Open
+   then //нарушена ЦЦ открытия - запрещаем возможность открытия
+     DbKranPpu.KranPpuParam[i1].HmiKrEnableToOpen:=false;   
+   end_if; // if DbKranPpu.KranPpuParam[i1].HmiErrCC_Open 
+
+
+(*
+      3.5. Вычиcление признаков неисправности крана, отбражаемого на ВУ : 
+   KrDefectNote - предупр. неисправность крана, при которой управление возможно \
+   KrDefectFatal - фатальная неисправность крана, при которой управление невозможно
+      Notes! n1) KrDefectFatal=true (фатальная неисправность) назначается в 
+   случаях : нарушение сразу обоих ЦЦ     
+      n2) KrDefectNote=true (предупр. неисправность) назначается в случаях : 
+   нарушение только одной ЦЦ \ оба коцевика =0 (и нет шагов операций) \ оба коце-
+   вика =1 (замкнуты) \ окончания предыд. операции с краном с ошибкой \ факте 
+   несанкционированного управления с ТЛ \ ручном управлении HandPush (не надо- есть
+   метка "Ручное управление") \ не квитированы сообщения (пока нерализовано - 29.11.13) 
+   \ ..
+      KrDefectNote=false (снимается), если уже есть фатальная неисправность 
+   (KrDefectFatal=true)
+      n3) М.б. сделать большее кол-во значков на отображение состояний - как в 
+   автомобиле ?
+      n4) NotSancMove м. тоже не анализировать - при нём оба концевика=0 и нет операций
+*)
+
+   // промежуточные переменные 
+   nbl1:=false; // для KrDefectNote
+   nbl2:=false; // для KrDefectFatal
+   
+   // Вычисление KrDefectFatal & KrDefectNote по нарушению ЦЦ 
+   if (DbKranPpu.KranPpuParam[i1].HmiErrCC_Close) and (DbKranPpu.KranPpuParam[i1].HmiErrCC_Open)
+   then // нарушение сразу обоих ЦЦ
+     nbl2:=true; // для KrDefectFatal
+   else 
+     if (DbKranPpu.KranPpuParam[i1].HmiErrCC_Close) or (DbKranPpu.KranPpuParam[i1].HmiErrCC_Open)  
+     then // нарушение только одной ЦЦ
+       nbl1:=true; // для KrDefectNote
+     end_if; // if (DbKranPpu.KranPpuParam[i1].HmiErrCC_Close) and..
+   end_if; // (DbKranPpu.KranPpuParam[i1].HmiErrCC_Close) or..
+     
+   // доВычисление KrDefectNote по остальным признакам, если KrDefectFatal=false
+   if (nbl2) 
+   then // Отключение преупредительной неисправности, если есть фатальная
+     nbl1:=false; 
+   else // доВычисление KrDefectNote
+     if ((DbKranPpu.KranPpuParam[i1].HmiErrClOp00) and 
+         (DbKranPpu.KranPpuParam[i1].OperStep=0))// оба коцевика =0 и нет шагов операций
+       or (DbKranPpu.KranPpuParam[i1].HmiErrClOp11) // оба коцевика =1
+       or (DbKranPpu.KranPpuParam[i1].OperErrorLbl) // наличие ошибки при выполнении операции 
+       //or (DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush) // ручное управление
+       //or (DbKranPpu.KranPpuParam[i1].KrClose_NotSancMove) // начало несанкцинир. закрытия
+       //or (DbKranPpu.KranPpuParam[i1].KrOpen_NotSancMove) // начало несанкцинир. открытия
+     then
+       nbl1:=true; // для KrDefectNote
+     end_if; // (DbKranPpu.KranPpuParam[i1].HmiErrClOp00) or..or..
+   end_if; // if (nbl2)
+
+   // присваиваем 1 раз
+   DbKranPpu.KranPpuParam[i1].KrDefectNote:=nbl1; // предупр. неисправность крана
+   DbKranPpu.KranPpuParam[i1].KrDefectFatal:=nbl2; // фатальная неисправность крана
+
+  end_for; // i1:=1.. 
+
+(*
+      4. Основная часть по выполнению операций с кранами. 
+      Выполняются шаги операций по закрытию или открытию кранов ЭППУ. При необходимости 
+   запускаются таймера на страгивание, полное закрытие(открытие), дожим.
+      Note! Для каждого крана ЭППУ в программе используется по одному таймеру с подстановкой 
+   нужных величин таймера в DbKranPpu.KranPpuParam[i1].TmOperKr_TV на этапах операций.   
+*)
+
+  for i1:=1 to DbKranPpu.numKrPpu do // цикл по чилу кранов ЭППУ
+    
+   if lblDopWork[i1] then // есть невыполненные операции   
+
+    case DbKranPpu.KranPpuParam[i1].OperStep of
+
+(*
+      4.1. Шаги операции по закрытию крана
+*)
+  
+     11 : // Операция "закрытие крана" : самое начало - подаем дискрет закрытия и включаем таймер на страгивание
+
+      // Предполагаем, что ошибок не будет
+       DbKranPpu.KranPpuParam[i1].OperErrorLbl:=false;
+       DbKranPpu.KranPpuParam[i1].OperErrorNum:=0;   
+ 
+       DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmStrag_Value; // в таймере - время страгивания 
+       TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+       DbKranPpu.KranPpuParam[i1].OperStep:=12;  // следующий шаг операции
+   
+       // Подача дискрета закрытия
+       DbKranPpu.KranPpuParam[i1].KrToCloseW:=1;
+       // Снятие дискрета открытия (для профилактики) : при закрытии не д.б. дискрета открытия
+       DbKranPpu.KranPpuParam[i1].KrToOpenW:=0;
+    
+     12 : // Операция "закрытие крана" : проверяем после таймера на страгивание и запускаем таймер на полное закрытие 
+       (*    Notes! n1) Контроль "отхода" концевика открытия. Если отошел, то 
+          переходим к следующему шагу операции (время страгивания TmStrag м. 
+          укорачивать). Если концевик открытия не отшел даже за время TmStrag,
+          то ошибка и снятие DO закрытия. 
+       *)
+       
+       lblOpOk:=false; // признак успешного завершения очередного шага операции
+       
+       // Проверка предварительная : отошел ли концевик открытия
+       if not(DbKranPpu.KranPpuParam[i1].KrOpen)
+       then // концевик открытия отошел (м. б. раньше окончания TmStrag)
+         lblOpOk:=true; 
+       end_if; // if not(DbKranPpu.KranPpuParam[i1].KrOpen)
+    
+       if (lblOpOk) 
+       then // переход к следующей операции
+         DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmFullClose_Value; // в таймере - время полного закрытия 
+         TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+         DbKranPpu.KranPpuParam[i1].OperStep:=13;  // следующий шаг операции
+       else // концевик открытия не отошел - проверяем : истекло ли время на страгивание 
+         if (TmOperState[i1]=3) 
+         then // err : концевик открытия не отшел и время на страгивание кончилось  
+           DbKranPpu.KranPpuParam[i1].OperErrorLbl:=true;  // признак ошибки
+           DbKranPpu.KranPpuParam[i1].OperErrorNum:=11;  // 11 - не отошел клнцевик открытия при закрытии крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=19;  // окончание операции закрытия по ошибке
+         end_if; // if (TmOperState[i1]=3)
+       end_if; // if (lblOpOk)
+
+      13 : // Операция "закрытие крана" : проверяем после таймера на полное закрытие и запускаем таймер на дожим 
+        (*    Notes! n1) Контроль "прихода" концевика закрытия. Если пришел, то 
+          переходим к следующему шагу операции (время полного закрытия TmFullClose м. 
+          укорачивать). Если концевик закрытия не пришел даже за время TmFullClose,
+          то ошибка и снятие DO закрытия. 
+        *)
+       
+       lblOpOk:=false; // обязательно обнулить снова, иначе проскочим
+       
+       // Проверка предварительная : пришел ли концевик закрытия
+       if (DbKranPpu.KranPpuParam[i1].KrClose)
+       then // концевик закрытия пришел (м. б. раньше окончания TmFullClose)
+         lblOpOk:=true; 
+       end_if; // if (DbKranPpu.KranPpuParam[i1].KrClose)
+    
+       if (lblOpOk) 
+       then // переход к следующей операции
+         DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmDogim_Value; // в таймере - время дожима 
+         TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+         DbKranPpu.KranPpuParam[i1].OperStep:=14;  // следующий шаг операции
+       else // концевик закрытия не пришел - проверяем : истекло ли время на полное закрытие 
+         if (TmOperState[i1]=3) 
+         then // err : концевик закрытия не пришел и время на полное закрытие кончилось  
+           DbKranPpu.KranPpuParam[i1].OperErrorLbl:=true;  // признак ошибки
+           DbKranPpu.KranPpuParam[i1].OperErrorNum:=12;  // 12 - не пришел клнцевик закрытия при закрытии крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=19;  // окончание операции закрытия по ошибке
+         end_if; // if (TmOperState[i1]=3)
+       end_if; // if (lblOpOk)
+
+      14 : // Операция "закрытие крана" : выключаем дискрет закрытия и проверяем после таймера на дожим 
+        (*    Notes! n1) Время на дожим не уменьшается - концевик закрытия сработал - 
+          просто ждем TmDogim. По окончании снимаем дискрет закрытия.
+              n2) Действия для OperStep=14 и OperStep=19 сейчас одинаковы. М.было
+          бы сэкономить, но не будем - по смыслу и отчету они разные : 14-всё ок, 
+          снимаем DO \ 19 : ошибка, снимаем DO. А в дальнейшем м.б. разная обработка..
+         *)
+
+       if TmOperState[i1]=3
+       then // таймер, запущенный после 13-й операции выполнен
+         // проверяем состояние ( цц закр=1, цц откр=1, концевик закр=1, концевик откр=0, ..)
+         //..
+   
+         // Снятие дискрета закрытия
+         DbKranPpu.KranPpuParam[i1].KrToCloseW:=0;
+ 
+         DbKranPpu.KranPpuParam[i1].OperStep:=0;  // следующий шаг операции
+         DbKranPpu.KranPpuParam[i1].Oper:=0;  // операций по крану больше нет
+       end_if; // if TmOperState[i1]=3
+
+     19 : // Операция "закрытие крана" : Прекращение операции закрытия по ошибке 
+       // Снятие дискрета закрытия
+       DbKranPpu.KranPpuParam[i1].KrToCloseW:=0;
+ 
+       DbKranPpu.KranPpuParam[i1].OperStep:=0;  // следующий шаг операции
+       DbKranPpu.KranPpuParam[i1].Oper:=0;  // операций по крану больше нет
+
+(*
+      4.2. Шаги операции по открытию крана
+*)
+  
+     21 : // Операция "открытие крана" : самое начало - подаем дискрет открытия и включаем таймер на страгивание
+
+       // Предполагаем, что ошибок не будет
+       DbKranPpu.KranPpuParam[i1].OperErrorLbl:=false;
+       DbKranPpu.KranPpuParam[i1].OperErrorNum:=0;   
+
+       DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmStrag_Value; // в таймере - время страгивания 
+       TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+       DbKranPpu.KranPpuParam[i1].OperStep:=22;  // следующий шаг операции
+
+       // Подача дискрета открытия
+       DbKranPpu.KranPpuParam[i1].KrToOpenW:=1;
+       // Снятие дискрета закрытия (для профилактики) : при открытии не д.б. дискрета закрытия
+       DbKranPpu.KranPpuParam[i1].KrToCloseW:=0;
+
+     22 : // Операция "открытие крана" : проверяем после таймера на страгивание и запускаем таймер на полное открытие 
+       (*    Notes! n1) Контроль "отхода" концевика закрытия. Если отошел, то 
+          переходим к следующему шагу операции (время страгивания TmStrag м. 
+          укорачивать). Если концевик закрытия не отшел даже за время TmStrag,
+          то ошибка и снятие DO открытия. 
+       *)
+    
+       lblOpOk:=false; // признак успешного завершения очередного шага операции
+
+       // Проверка предварительная : отошел ли концевик закрытия
+       if not(DbKranPpu.KranPpuParam[i1].KrClose)
+       then // концевик закрытия отошел (м. б. раньше окончания TmStrag)
+         lblOpOk:=true; // 
+       end_if; // if not(DbKranPpu.KranPpuParam[i1].KrClose)
+    
+       if (lblOpOk) 
+       then // переход к следующей операции
+         DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmFullOpen_Value; // в таймере - время полного открытия 
+         TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+         DbKranPpu.KranPpuParam[i1].OperStep:=23;  // следующий шаг операции
+       else // концевик закрытия не отошел - проверяем : истекло ли время на страгивание 
+         if (TmOperState[i1]=3) 
+         then // err : концевик закрытия не отшел и время на страгивание кончилось  
+           DbKranPpu.KranPpuParam[i1].OperErrorLbl:=true;  // признак ошибки
+           DbKranPpu.KranPpuParam[i1].OperErrorNum:=21;  // 21 - не отошел концевик закрытия при открытии крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=29;  // окончание операции открытия по ошибке
+         end_if; // if (TmOperState[i1]=3)
+       end_if; // if (lblOpOk)
+
+     23 : // Операция "открытие крана" : проверяем после таймера на полное открытие и запускаем таймер на дожим 
+       (*    Notes! n1) Контроль "прихода" концевика открытия. Если пришел, то 
+          переходим к следующему шагу операции (время полного открытия TmFullOpen м. 
+          укорачивать). Если концевик открытия не пришел даже за время TmFullOpen,
+          то ошибка и снятие DO открытия. 
+       *)
+  
+       lblOpOk:=false; // обязательно обнулить снова, иначе проскочим
+       
+       // Проверка предварительная : пришел ли концевик открытия
+       if (DbKranPpu.KranPpuParam[i1].KrOpen)
+       then // концевик открытия пришел (м. б. раньше окончания TmFullOpen)
+         lblOpOk:=true; 
+       end_if; // if (DbKranPpu.KranPpuParam[i1].KrOpen)
+    
+       if (lblOpOk) 
+       then // переход к следующей операции
+         DbKranPpu.KranPpuParam[i1].TmOperKr_TV:=DbKranPpu.KranPpuParam[i1].TmDogim_Value; // в таймере - время дожима 
+         TmOperStartImpulse[i1]:=true; // запустить таймер при прохождении через блок работы с таймерами
+         DbKranPpu.KranPpuParam[i1].OperStep:=24;  // следующий шаг операции
+       else // концевик открытия не пришел - проверяем : истекло ли время на полное открытие 
+         if (TmOperState[i1]=3) 
+         then // err : концевик открытия не пришел и время на полное открытие кончилось  
+           DbKranPpu.KranPpuParam[i1].OperErrorLbl:=true;  // признак ошибки
+           DbKranPpu.KranPpuParam[i1].OperErrorNum:=22;  // 22 - не пришел клнцевик открытия при открытии крана
+           DbKranPpu.KranPpuParam[i1].OperStep:=29;  // окончание операции закрытия по ошибке
+         end_if; // if (TmOperState[i1]=3)
+       end_if; // if (lblOpOk)
+ 
+     24 : // Операция "открытие крана" : выключаем дискрет открытия и проверяем после таймера на дожим 
+       (*    Notes! n1) Время на дожим не уменьшается - концевик открытия сработал - 
+          просто ждем TmDogim. По окончании снимаем дискрет открытия.
+              n2) Действия для OperStep=24 и OperStep=29 сейчас одинаковы. М.было
+          бы сэкономить, но не будем - по смыслу и отчету они разные : 24-всё ок, 
+          снимаем DO \ 29 : ошибка, снимаем DO. А в дальнейшем м.б. разная обработка..
+       *)
+
+       if TmOperState[i1]=3
+       then // таймер, запущенный после 23-й операции выполнен
+         // проверяем состояние ( цц откр=1, цц закр=1, концевик откр=1, концевик закр=0, ..)
+         //..
+       
+         // Снятие дискрета открытия 
+         DbKranPpu.KranPpuParam[i1].KrToOpenW:=0;
+
+         DbKranPpu.KranPpuParam[i1].OperStep:=0;  // следующий шаг операции
+         DbKranPpu.KranPpuParam[i1].Oper:=0;  // операций по крану больше нет
+       end_if; // if TmOperState[i1]=3
+
+     29 : // Операция "открытие крана" : Прекращение операции открытия по ошибке 
+       // Снятие дискрета открытия
+       DbKranPpu.KranPpuParam[i1].KrToOpenW:=0;
+ 
+       DbKranPpu.KranPpuParam[i1].OperStep:=0;  // следующий шаг операции
+       DbKranPpu.KranPpuParam[i1].Oper:=0;  // операций по крану больше нет
+
+    end_case; // case DbKranPpu.KranPpuParam[i1].OperStep  
+
+(*
+      4.4. Запуск таймеров для кранов ЭППУ.
+*)
+ 
+    if TmOperStartImpulse[i1] then
+     TmOperState[i1]:=1; // для начала работы (сброс -> запуск -> завершение)
+     TmOperStartImpulse[i1]:=false; // не запускать таймер на операцию для крана
+    end_if; // if StartOperImpulse[i1]
+    
+    if TmOperState[i1]=1 // надо сбросить таймер
+    then // быстрый сброс таймера перед запусом
+     TmOperResult[i1]:=s_odts(T_NO:=DbKranPpu.KranPpuParam[i1].TmOperKr_NO,
+                              TV:=DbKranPpu.KranPpuParam[i1].TmOperKr_TV,
+                              S:=false,
+                              R:=true, 
+                              Q:=DbKranPpu.KranPpuParam[i1].TmOperKr_Q);
+     TmOperState[i1]:=2;
+
+    end_if; // if TmState[i1]=1
+
+    if TmOperState[i1]=2 // надо запустить таймер и ждать завершения
+    then  // запуск таймера на промежуток DbKranPpu.KranPpuParam[i1].TmOperKr_TV
+     TmOperResult[i1]:=s_odts(T_NO:=DbKranPpu.KranPpuParam[i1].TmOperKr_NO,
+                              TV:=DbKranPpu.KranPpuParam[i1].TmOperKr_TV,
+                              S:=true,
+                              R:=false,
+                              Q:=DbKranPpu.KranPpuParam[i1].TmOperKr_Q);
+     if DbKranPpu.KranPpuParam[i1].TmOperKr_Q then TmOperState[i1]:=3; end_if; // по завершению времени
+    end_if; // if TmState[i1]=2
+                        
+
+   end_if; // if lblDopWork[i1]
+  end_for; // i1:=1.. 
+
+(*
+      5. Заключительный этап в цикле сканирования.
+*)
+
+  for i1:=1 to DbKranPpu.numKrPpu do
+
+(*
+      5.1. Подача\снятие дискрета закрытия из значениz KrToCloseW и дискрета 
+   открытия из значениz KrToOpenW.
+      Notes! n1) Значение на начало очередного цикла Fb обработки кранов хранится
+   для KrToCloseW в KrToCloseR, а для KrToOpenW - в KrToOpenR. Чтобы не "дрючить" 
+   выходы DO пишем только в случае изменения значения сигнала.  
+      n2) Подача\снятие дискрета производится только для обычного режима. Для
+   "ручного" режима (CmdKrPpuHandPush=true) пропускаем - всё уже было подано. 
+*)
+    
+    if not(DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush)
+    then // ручное директивное управление выключено
+
+      // Подача\снятие дискрета закрытия из KrToCloseW (5-й элемент всегда)
+      if DbKranPpu.KranPpuParam[i1].KrToCloseW<>DbKranPpu.KranPpuParam[i1].KrToCloseR
+      then // значение сигнала для дискрета закрытия изменилось в процессе анализа
+        if DbKranPpuAdr.KranPpuEmul
+        then // эмуляция сигналов кранов : назначаем значение в DbKranPpuAdr..Value
+          DbKranPpuAdr.KranPpuAdrParam[i1,5].Value:=DbKranPpu.KranPpuParam[i1].KrToCloseW;
+        else // Подача сигнала на реальный выход крана (дискрет закрытия подан)
+          Q[DbKranPpuAdr.KranPpuAdrParam[i1,5].adr1,
+            DbKranPpuAdr.KranPpuAdrParam[i1,5].adr2]:=DbKranPpu.KranPpuParam[i1].KrToCloseW; 
+        end_if; // if DbKranPpuAdr.KranPpuEmul
+      end_if; // if DbKranPpu.KranPpuParam[i1].KrToCloseW<>..
+
+      // Подача\снятие дискрета открытия из KrToOpenW (6-й элемент всегда)
+      if DbKranPpu.KranPpuParam[i1].KrToOpenW<>DbKranPpu.KranPpuParam[i1].KrToOpenR
+      then // значение сигнала для дискрета открытия изменилось в процессе анализа
+        if DbKranPpuAdr.KranPpuEmul
+        then // эмуляция сигналов кранов : назначаем значение в DbKranPpuAdr..Value
+          DbKranPpuAdr.KranPpuAdrParam[i1,6].Value:=DbKranPpu.KranPpuParam[i1].KrToOpenW;
+        else // Подача сигнала на реальный выход крана (дискрет открытия подан)
+          Q[DbKranPpuAdr.KranPpuAdrParam[i1,6].adr1,
+            DbKranPpuAdr.KranPpuAdrParam[i1,6].adr2]:=DbKranPpu.KranPpuParam[i1].KrToOpenW;
+        end_if; // if DbKranPpuAdr.KranPpuEmul
+      end_if; // if DbKranPpu.KranPpuParam[i1].KrToOpenW<>..
+    
+    end_if; // if not(DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush)
+
+(*
+      5.2. Сброс событий, произошедших за цикл сканирования.
+      Notes! n1) Возможно перед сбросом здесь производить здесь какие-то операции по событиям,
+   напр. инициализация сообщений.
+      n2) М.б. надо будет перенести этот блок в самый конец п.5
+*)
+  
+    DbKranPpu.KranPpuParam[i1].KrClose_Ev01:=0;
+    DbKranPpu.KranPpuParam[i1].KrClose_Ev10:=0;
+    DbKranPpu.KranPpuParam[i1].KrOpen_Ev01:=0;
+    DbKranPpu.KranPpuParam[i1].KrOpen_Ev10:=0;
+ (*
+    DbKranPpu.KranPpuParam[i1].CC_Close_Ev01:=0;
+    DbKranPpu.KranPpuParam[i1].CC_Close_Ev10:=0;
+    DbKranPpu.KranPpuParam[i1].CC_Open_Ev01:=0;
+    DbKranPpu.KranPpuParam[i1].CC_Open_Ev10:=0;
+*)
+
+  end_for; // for i1:=1.. 
+
+end_function_block
+
+//=====================================
+// Объявление Instance Db252 для FB252
+Data_Block idb_fb_KranPpu fb_KranPpu   //DB252 FB252
+Begin
+End_Data_Block
+
+

@@ -1,0 +1,92 @@
+
+FUNCTION_BLOCK fb_Cnvt_Bool1
+//Разборка булевых переменных первой посылки, присвоение переменных 
+VAR_TEMP
+    i   :INT;
+    j   :INT;
+    k   :INT;
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    FOR j := 0 TO 1 BY 1 DO
+        FOR k := 0 TO 2 BY 1 DO
+            IF db_BU.CP[i].PORT[j].BU[k].rcv[0].ready THEN
+                
+                db_BU.CP[i].PORT[j].BU[k].rcv[0].ready := 0;                        //Сброс готовности посылки к обработке
+                
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Flow.RFault            := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 15), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Flow.RWr               := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 14), N := 15)); 
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Flow.RSwitch           := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 13), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 12), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[0].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 11), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 10), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[1].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 9),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 8),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Crane[2].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 7),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_Switch       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 6),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCntr_Curr         := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 5),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RHw_Fault          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 4),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RClose_Fault       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 3),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.ROpen_Fault        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 2),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RComm_Fault        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 1),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RBigNE           := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[44], N := 0),  N := 15));        
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RWarnNE          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 15), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Post.RReq              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 14), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Post.RVal              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 13), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].WrkRegim.RSwRegWrk     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 12), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RAlarmRed     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 11), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RGasNotBleed  := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 10), N := 13));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RFaultHW      := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 9),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RFaultTehn    := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 8),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RFaultCntr    := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 7),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RRepair       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 6),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PipeMess.RFaultInt     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 5),  N := 15));
+                
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Flow.RFault            := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 4),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Flow.RWr               := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 3),  N := 15)); 
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Flow.RSwitch           := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 2),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 1),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[0].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[45], N := 0),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 15), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[1].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 14), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RComm_Fault   := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 13), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Crane[2].RMCntr        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 12), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_Switch       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 11), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCntr_Curr         := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 10), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RHw_Fault          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 9),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RClose_Fault       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 8),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.ROpen_Fault        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 7),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RComm_Fault        := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 6),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RBigNE           := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 5),  N := 15));        
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RWarnNE          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 4),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Post.RReq              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 3),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Post.RVal              := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 2),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].WrkRegim.RSwRegWrk     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 1),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RAlarmRed     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[46], N := 0),  N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RGasNotBleed  := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 15), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RFaultHW      := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 14), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RFaultTehn    := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 13), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RFaultCntr    := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 12), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RRepair       := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 11), N := 15));
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PipeMess.RFaultInt     := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 10), N := 15));
+                
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].WrkRegim.RGRP          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 9),  N := 15));    
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].WrkRegim.RGRP          := WORD_TO_BOOL(SHR(in := SHL(in := db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[47], N := 8),  N := 15));
+
+                fb_Cnvt_Com.idb_fb_Cnvt_Com(CP := i ,PORT := j ,BU := k);           //Вызов функции для обработки общих параметров нитки
+               
+             END_IF;   
+         END_FOR;       
+    END_FOR;
+END_FOR;
+
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_Cnvt_Bool1  fb_Cnvt_Bool1
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+
