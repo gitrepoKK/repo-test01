@@ -1,0 +1,147 @@
+
+DATA_BLOCK db_BU
+//В Этом блоке описаны переменные связанные с блоками управления, концепция состоит в том что на у контроллера 
+//есть два коммуникационных процессора,в каждом коммуникационном
+//процессоре есть 2 порта и на каждом порту висят три блока управления. Каждый блок управления обслуживает 2 нитки(шлейфа).
+//На нитку приходится две команды опроса параметров 
+//Нельзя присваивать разным блокам одинаковые номера ниток
+///Количество блоков 12, количество шлейфов 24
+STRUCT
+     CP:ARRAY [0..1] OF STRUCT                         
+        PORT:ARRAY [0..1] OF STRUCT
+             BU:ARRAY [0..2] OF STRUCT
+                Addr                :BYTE;                      //Адрес блока управления в HEX
+                PIPE                :ARRAY [0..1] OF INT;       //Номера ниток(шлейфов)   
+                BU_Regim            :INT;                       //Режим работы блока управления
+                cnt                 :INT;
+                rcv_tmp             :udt_Rcv;                       
+                snd                 :ARRAY [0..1] OF udt_Snd;   //посылки команд
+                rcv                 :ARRAY [0..1] OF udt_Rcv;   //буфер приема ответов на команды
+                dwnl_End            :BOOL;                      //Признак окнчания загрузки true - конец
+                dwnl_Sucsess        :BOOL;                      //Признак успеха загрузки true - успех
+                dwnl_Half_e1        :BOOL;                      //Признак готовности первой половины буфера true - готов  
+                dwnl_Half_e2        :BOOL;                      //Признак готовности второй половины буфера true - готов
+                dwnl_data_cnt       :INT;                       //
+                dwnl_flength        :DWORD;                     //Длина передаваемого файла в байтах
+                    dwnl_data:ARRAY [0..9] OF STRUCT            //Массив структур буферов на передачу    
+                        data        :ARRAY [0..126] OF WORD;    //Данные    
+                        Length      :INT;                       //Длина
+                        ready       :BOOL;                      //готовность true - готов
+                    END_STRUCT;   
+                END_STRUCT;
+            END_STRUCT;
+      END_STRUCT;          
+END_STRUCT
+
+BEGIN
+                                                    //CP0        
+                                                    //CP0 PORT0               
+                                                    //CP0 PORT0 BU0
+(*
+     Договоренности для sepGsp2 : 
+       1) "Номера" БУ и подсистемы : БУ1 - СП1 \ БУ2 - ПТН \ БУ3 - СИ1 \ БУ4 - СИ2
+       2) Адреса БУ : БУ1 - 2 \ БУ2 - 3 \ БУ3 - 4 \ БУ4 - 5
+       3) Номер эл-та в db_Pipe[] для подсистем : 0-СИ1 \ 1-СИ2 \ 2-СП1 \ 3-ПТН \ 
+       1) Новые "Номера" БУ и подсистемы : БУ1 - СИ1 \ БУ2 - СИ2 \ БУ3 - СП1 \ БУ4 - ПТН !!!
+*)
+//PORT[0].BU[0] : БУ1 - СИ1 
+CP[0].PORT[0].BU[0].addr            := B#16#02;  // адрес БУ1 (SepGsp2)    
+CP[0].PORT[0].BU[0].PIPE[0]         := 0;  // номер "нитки" для шлейфа 57 БУ1 (номер эл-та в db_Pipe (начинается с 0)
+CP[0].PORT[0].BU[0].PIPE[1]         := 10; // номер "нитки" для шлейфа 3 БУ1
+CP[0].PORT[0].BU[0].snd[0].adress   := B#16#02; // адрес БУ1 (SepGsp2)
+CP[0].PORT[0].BU[0].snd[0].funct    := B#16#02;
+CP[0].PORT[0].BU[0].snd[0].Reg      := W#16#64;
+CP[0].PORT[0].BU[0].snd[0].Ndata    := 758;
+CP[0].PORT[0].BU[0].snd[0].Lenght   := W#16#6;
+CP[0].PORT[0].BU[0].snd[1].adress   := B#16#02; // адрес БУ1 (SepGsp2)
+CP[0].PORT[0].BU[0].snd[1].funct    := B#16#02;
+CP[0].PORT[0].BU[0].snd[1].Reg      := W#16#3e8;
+CP[0].PORT[0].BU[0].snd[1].Ndata    := 1012;
+CP[0].PORT[0].BU[0].snd[1].Lenght   := W#16#6;
+                                                    //CP0 PORT0 BU1
+//PORT[0].BU[1] : БУ2 - СИ2 
+CP[0].PORT[0].BU[1].addr            := B#16#03; // адрес БУ2 (SepGsp2)
+CP[0].PORT[0].BU[1].PIPE[0]         := 1; // номер "нитки" для шлейфа 57 БУ2
+CP[0].PORT[0].BU[1].PIPE[1]         := 11; // номер "нитки" для шлейфа 3 БУ2
+CP[0].PORT[0].BU[1].snd[0].adress   := B#16#03; // адрес БУ2 (SepGsp2)
+CP[0].PORT[0].BU[1].snd[0].funct    := B#16#02;
+CP[0].PORT[0].BU[1].snd[0].Reg      := W#16#64;
+CP[0].PORT[0].BU[1].snd[0].Ndata    := 758;
+CP[0].PORT[0].BU[1].snd[0].Lenght   := W#16#6;
+CP[0].PORT[0].BU[1].snd[1].adress   := B#16#03; // адрес БУ2 (SepGsp2)
+CP[0].PORT[0].BU[1].snd[1].funct    := B#16#02;
+CP[0].PORT[0].BU[1].snd[1].Reg      := W#16#3e8;
+CP[0].PORT[0].BU[1].snd[1].Ndata    := 1012;
+CP[0].PORT[0].BU[1].snd[1].Lenght   := W#16#6;
+                                                    //CP0 PORT1
+                                                    //CP0 PORT1 BU0
+//PORT[1].BU[0] : БУ3 - СП1 
+CP[0].PORT[1].BU[0].addr            := B#16#04; // адрес БУ3 (SepGsp2)
+CP[0].PORT[1].BU[0].PIPE[0]         := 2; // номер "нитки" для шлейфа 57 БУ3
+CP[0].PORT[1].BU[0].PIPE[1]         := 12; // номер "нитки" для шлейфа 3 БУ3
+CP[0].PORT[1].BU[0].snd[0].adress   := B#16#04; // адрес БУ3 (SepGsp2)
+CP[0].PORT[1].BU[0].snd[0].funct    := B#16#02;
+CP[0].PORT[1].BU[0].snd[0].Reg      := W#16#64;
+CP[0].PORT[1].BU[0].snd[0].Ndata    := 758;
+CP[0].PORT[1].BU[0].snd[0].Lenght   := W#16#6;
+CP[0].PORT[1].BU[0].snd[1].adress   := B#16#04; // адрес БУ3 (SepGsp2)
+CP[0].PORT[1].BU[0].snd[1].funct    := B#16#02;
+CP[0].PORT[1].BU[0].snd[1].Reg      := W#16#3e8;
+CP[0].PORT[1].BU[0].snd[1].Ndata    := 1012;
+CP[0].PORT[1].BU[0].snd[1].Lenght   :=  W#16#6;
+                                                    //CP0 PORT1 BU1
+//PORT[1].BU[1] : БУ4 - ПТН
+CP[0].PORT[1].BU[1].addr            := B#16#05; // адрес БУ4 (SepGsp2)
+CP[0].PORT[1].BU[1].PIPE[0]         := 3; // номер "нитки" для шлейфа 57 БУ4
+CP[0].PORT[1].BU[1].PIPE[1]         := 13; // номер "нитки" для шлейфа 3 БУ4
+CP[0].PORT[1].BU[1].snd[0].adress   := B#16#05; // адрес БУ4 (SepGsp2)
+CP[0].PORT[1].BU[1].snd[0].funct    := B#16#02;
+CP[0].PORT[1].BU[1].snd[0].Reg      := W#16#64;
+CP[0].PORT[1].BU[1].snd[0].Ndata    := 758;
+CP[0].PORT[1].BU[1].snd[0].Lenght   := W#16#6;
+CP[0].PORT[1].BU[1].snd[1].adress   := B#16#05; // адрес БУ4 (SepGsp2)
+CP[0].PORT[1].BU[1].snd[1].funct    := B#16#02;
+CP[0].PORT[1].BU[1].snd[1].Reg      := W#16#3e8;
+CP[0].PORT[1].BU[1].snd[1].Ndata    := 1012;
+CP[0].PORT[1].BU[1].snd[1].Lenght   := W#16#6;
+
+
+//////////////
+//12.03.2014 Добавлено Лещёвой И. чтобы не было путаницы с адресами
+CP[0].PORT[0].BU[2].addr            := B#16#22;     
+CP[0].PORT[0].BU[2].PIPE[0]         := 22;  
+CP[0].PORT[0].BU[2].PIPE[1]         := 22;
+
+CP[0].PORT[1].BU[2].addr            := B#16#22;     
+CP[0].PORT[1].BU[2].PIPE[0]         := 22;  
+CP[0].PORT[1].BU[2].PIPE[1]         := 22;
+
+CP[1].PORT[0].BU[0].addr            := B#16#22;     
+CP[1].PORT[0].BU[0].PIPE[0]         := 22;  
+CP[1].PORT[0].BU[0].PIPE[1]         := 22;
+
+CP[1].PORT[0].BU[1].addr            := B#16#22;     
+CP[1].PORT[0].BU[1].PIPE[0]         := 22;  
+CP[1].PORT[0].BU[1].PIPE[1]         := 22;
+
+CP[1].PORT[0].BU[2].addr            := B#16#22;     
+CP[1].PORT[0].BU[2].PIPE[0]         := 22;  
+CP[1].PORT[0].BU[2].PIPE[1]         := 22;
+
+CP[1].PORT[1].BU[0].addr            := B#16#22;     
+CP[1].PORT[1].BU[0].PIPE[0]         := 22;  
+CP[1].PORT[1].BU[0].PIPE[1]         := 22;
+
+CP[1].PORT[1].BU[1].addr            := B#16#22;     
+CP[1].PORT[1].BU[1].PIPE[0]         := 22;  
+CP[1].PORT[1].BU[1].PIPE[1]         := 22;
+
+CP[1].PORT[1].BU[2].addr            := B#16#22;     
+CP[1].PORT[1].BU[2].PIPE[0]         := 22;  
+CP[1].PORT[1].BU[2].PIPE[1]         := 22;
+//////////////
+
+END_DATA_BLOCK
+
+
+

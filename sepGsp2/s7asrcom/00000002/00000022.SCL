@@ -1,0 +1,69 @@
+
+FUNCTION_BLOCK fb_Snd_Rcv_CP00
+//CP 0 PORT 0
+//Вызов основных функций send recive и status, подсчет количества удачных и неудачных посылок
+//Диагностическая функция status дает расшифровку ошибки. Признак посылки bsnd стирается сразу после первого вызова функции
+//BSEND. Признак приема  DONE активен только при условии, что прсылка дошла до блока управления,
+//блок ответил согласно реализации протокола MODBUS реализованнному в СP441-2 и CP удачно принял ответ.
+//В противном случае после таймаута, который выставляется в Hardware configuration ERROR активен
+//И DONE и ERROR активны один цикл контроллера, а сами функции BSEND STATUS BRCV асинхронны
+// и могут выполняются несколько циклов. Функции BSEND STATUS BRCV в качестве параметра ID принимают
+//значение сконфигурированного соединения из Hardware configuration, R_ID особого смысла не несет 
+VAR_INPUT  
+    SndBuff :udt_Snd;
+END_VAR
+
+VAR
+phys    :ARRAY[1..4] OF BYTE;
+logi    :ARRAY[1..4] OF BYTE;
+local   :ARRAY[1..16] OF BYTE;
+END_VAR
+
+IF idb_snd00.DONE THEN 
+    
+    idb_fb_QueueEx.s_d[0, 0] := idb_fb_QueueEx.s_d[0, 0] + 1; 
+        
+        IF idb_fb_QueueEx.s_d[0, 0] > 1000 THEN 
+           idb_fb_QueueEx.s_d[0, 0] :=0;
+        END_IF;
+    
+    idb_fb_QueueEx.DoneSts[0, 0] :=1;
+    idb_fb_QueueEx.done   [0, 0] :=1; 
+END_IF;
+
+IF idb_snd00.ERROR THEN 
+   
+    idb_fb_QueueEx.s_e[0, 0] := idb_fb_QueueEx.s_e[0, 0] + 1;
+   
+    IF idb_fb_QueueEx.s_e[0, 0] > 1000 THEN 
+       idb_fb_QueueEx.s_e[0, 0] := 0; 
+    END_IF;
+    
+    idb_fb_QueueEx.DoneSts[0, 0] := 0;
+    idb_fb_QueueEx.done   [0, 0] := 1; 
+END_IF;
+
+STATUS.idb_sts00(REQ := idb_fb_QueueEx.bsnd[0, 0], ID :=  W#16#1010, PHYS := phys, LOG := logi, LOCAL := local); 
+                
+IF BYTE_TO_BOOL(local[3]) THEN
+    idb_fb_QueueEx._local[0, 0, 5] := local[5];
+    idb_fb_QueueEx._local[0, 0, 6] := local[6];
+END_IF;
+
+BSEND.idb_snd00(REQ := idb_fb_QueueEx.bsnd[0, 0], R :=  false, ID :=  w#16#1010, R_ID := DW#16#10, SD_1 := SndBuff, LEN  := SndBuff.Lenght);
+
+idb_fb_QueueEx.bsnd[0, 0] := 0; 
+        
+BRCV.idb_rcv00(EN_R := 1, ID :=  W#16#1010, R_ID := dW#16#10, RD_1 := idb_fb_QueueEx.RcvBuff[0, 0], LEN  := idb_fb_QueueEx.wlen[0, 0]);
+    
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Snd_Rcv_CP00  fb_Snd_Rcv_CP00
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

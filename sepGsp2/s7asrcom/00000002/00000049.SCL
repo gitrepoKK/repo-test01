@@ -1,0 +1,280 @@
+(*
+      fc_Caution.scl - содержит функции для работы с Caution- предупреждениями,
+   отображаемыми на световой и звуковой сигнализациях в УПС (для краткости - Тревогами):
+        F.1. FcSetCaution(CautionID : int) : void
+        F.2. FcPlayCaution() : void
+*)
+
+//======================================= >F1 ==================================
+
+(* 
+      F.1. FcSetCaution(CautionID : int) : void - функция назначения данных для проиг-
+   рывания тревоги CautionID.
+
+      Алгоритм : 1) Cтавит отметку о времени и номере последней тревоги в пере-
+   менные DbCaution.ValueID, DbCaution.tStamp. 
+      2) Перезаписывается MelodyBuffer - музыкальный буфер (переменная для 
+   "проигрывания" тревоги).
+      3) доНазначаются выходные дискретные сигналы, на которых должна воспроизво-
+   диться тревога. Происходит присвоение типа :
+      DbSensBool.ZagazUpr_SepSignal_Svet1.Value:=DbCaution.CautionParam[CautionID].PlayOn_SepSignal_Svet1
+      4) Назначается DbCaution.isActive:=true - тревога активна (её необходимо 
+   проиграть).
+       
+      Notes! n1) Здесь применён принцип "добавления новой тревоги к ещё непроиг-
+   ранной", т.е. MelodyBuffer полностью обновляется для новой тревоги, а новые 
+   источники воспроизведения добавляются к источникам ещё непроигранной тревоги.
+      Т.о. если тревоги накладываются друг на друга по времени, то мелодия обнов-
+   ляется, а источники воспроизведения тревоги складываются.
+      n2) Музыкальный буфер MelodyBuffer проигрывается последовательными вызовами
+   FcPlayCaution() по прерываниям (1раз/сек). Каждый раз проигрывается последний 
+   бит и буфер сдвигается вправо на 1 бит, пока MelodyBuffer<>0. (Проигрывание 
+   справа налево).
+      Как только тревога будет полностью проиграна (MelodyBuffer=0), то все источники
+   воспроизведения "обнуляются" в функции FcPlayCaution и выполняется присвоение 
+   DbCaution.isAcive:=false - тревога для проигрывания неактивна.
+      n3) Если применять принцип "полной замены непроигранной мелодии новой", то здесь
+   следует сделать прямые переназначения для всех источников (без условий) типа :
+      DbSensBool.ZagazUpr_SepSignal_Svet1.Value:=DbCaution.CautionParam[CautionID].PlayOn_SepSignal_Svet1,
+   а их обнуление в FcPlayCaution м. не делать.
+*) 
+
+Function FcSetCaution : void 
+
+Title = 'FcSetCaution'
+Version: '1.0'
+Author: Konst
+Name: FcSetBit
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+ CautionID : int;
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ cID,ni1 : int;   
+ TimePlc : dt; // текущее время ПЛК   
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Проверка CautionID на соответствие допустимому диапазону : 
+   [1-DbCaution.numCaution]. Если тревога инициируется с недопустимым номером ID,
+   то CautionID=DbCaution.numCaution (последняя из перечня тревог).
+      Note! Это перестраховка. Можно было бы вообще игнорировать тревогу с недо-
+   пустимым номером ID, но тогда об этом никто никак не узнает. А так м. завести
+   последий эл-т в DbCaution.CautionParam[] специально для выявления таких ситуаций :
+   Например, втихую - всё равно отметки в ValueID и tStamp о последей тревоге останутся.
+*)
+ 
+ cID:=CautionID; 
+ if (cID<1) or (cID>DbCaution.numCaution) then cID:=DbCaution.numCaution; end_if;
+
+(*
+      1. Отметка о номере и времени последней тревоги.
+*)
+
+ DbCaution.ValueID:=cID; //номер последней тревоги
+
+ ni1:=Read_Clk(CDT := TimePlc); // чтение системного времени ПЛК (текущее время ПЛК)
+ DbCaution.tStamp_Format_TOD:=DT_TOD(IN:= TimePlc); // FC8 : из TimePlc выделяем время
+                                                // (формат TimeOfDay - "железный", для дубляжа даты)
+
+ //Берём подСтроку постоянно обновляемой в Fb_Flow текущей даты  ("из-под локтя") 
+ // Note! Почему-то здесь нельзя вызвать : DtStr1:=FcDtIntToStr(ObjDtInt:=DbControl.DtPlc_Format_Int))
+ DbCaution.tStamp_Format_Str:=mid(in:=DbControl.DtPlc_Format_Str, L:=17, P:=1); 
+
+(*
+      2. Мелодию на исполнение в "музыкальный" буфер
+*)
+
+ DbCaution.MelodyBuffer:=int_to_word(DbCaution.CautionParam[cID].Melody);
+
+(*
+      3. ДоНазначение источников Световой и Звуковой сигнализации. 
+      Note! Обновляются значения не для всех источников заново, а только если 
+   источник назначен для проигрывания тревоги с этим ID (принцип "добавления 
+   новой тревоги к ещё непроигранной" - см. Notes выше).
+*)
+
+ //сигнал на SepSignal_Svet1 :
+ if (DbCaution.CautionParam[cID].PlayOn_SepSignal_Svet1) then DbSensBool.ZagazUpr_SepSignal_Svet1.Value:=true; end_if; 
+
+ //сигнал на SepSignal_Svet2 :
+ if (DbCaution.CautionParam[cID].PlayOn_SepSignal_Svet2) then DbSensBool.ZagazUpr_SepSignal_Svet2.Value:=true; end_if; 
+
+ //сигнал на SepSignal_Zvuk1 :
+ if (DbCaution.CautionParam[cID].PlayOn_SepSignal_Zvuk1) then DbSensBool.ZagazUpr_SepSignal_Zvuk1.Value:=true; end_if; 
+
+ //сигнал на OperSignal_Svet :
+ if (DbCaution.CautionParam[cID].PlayOn_OperSignal_Svet) then DbSensBool.ZagazUpr_OperSignal_Svet.Value:=true; end_if; 
+
+ //сигнал на OperSignal_Zvuk :
+ if (DbCaution.CautionParam[cID].PlayOn_OperSignal_Zvuk) then DbSensBool.ZagazUpr_OperSignal_Zvuk.Value:=true; end_if; 
+
+ //сигнал на UouSignal_Svet :
+ if (DbCaution.CautionParam[cID].PlayOn_UouSignal_Svet) then DbSensBool.ZagazUpr_UouSignal_Svet.Value:=true; end_if; 
+ 
+(*
+      4. Назначение DbCaution.isActive
+*)
+
+ DbCaution.isActive:=true; //тревога активна
+   
+
+End_Function
+
+//======================================= >F2 ==================================
+
+(* 
+      F.2. FcPlayCaution() : void - функция проигрывания тревоги из 
+   DbCaution.MelodyBuffer на выходных дискретных сигналах световой и звуковой 
+   сигнализации, принадлежащих подсистеме "УПС".
+      Вызывается по прерываниям 1р/сек из Ob32. За 1 вызов проигрывает в течении
+   1сек самый правый бит в MelodyBuffer на источниках отображения тревог. Потом 
+   "музыкальный" буфер сдвигается вправо на 1 бит для следующего вызова и так, 
+   пока буфер станет "нулевым". Т.е., когда справа-налево проиграетя последняя 
+   "1", тревога закончит отображаться на источниках.
+      Notes! n1) Функция вызывается из Ob32 только при условии (DbCaution.isActive=true),
+   а после проигрывания всей мелодии переназначает DbCaution.isActive:=false
+   и "стирает" все назначения источников. 
+      n2) При возникновении  какой-либо тревоги в подсистеме УПС вызывается 
+   FcPlayCaution(ID), которая взависимости от ID (номера тревоги) назначает 
+   DbCaution.MelodyBuffer, источники световой и звуковой сигнализации для вос-
+   произведения тревоги и назначает  DbCaution.isActive:=true для её дальнейшей
+   обработки с пом. FcPlayCaution().
+*) 
+
+Function FcPlayCaution : void 
+
+Title = 'FcPlayCaution'
+Version: '1.0'
+Author: Konst
+Name: FcSetBit
+Family: Main
+
+// Входные параметры Var_Input
+var_input
+
+end_var //var_input
+
+// Локальные переменные
+var_temp
+ nw1 : word;
+end_var //var_temp
+
+//=======================  Instructions  ===============================>
+
+ if (DbCaution.MelodyBuffer<>w#16#0000) or DbCaution.SignalW
+ then  
+(*
+      1. Ситуация : есть что проиграть в MelodyBuffer (ненулевые биты) или остал-
+   ся включённым сигнал SignalW.
+*)
+
+(* 
+      1.1. Выделение последнего бита из DbCaution.MelodyBuffer в DbCaution.SignalW
+   и сдвижка буфера вправо на 1 бит.
+      Note! Проигранный бит перед сдвижкой вправо заменяется на "0", чтобы он 
+   снова не появился "по кругу". Используется принцип "Проиграли, стёрли, подви-
+   нули (перешли) к следующему".
+*)
+
+   //DO-сигнал для упр. светом и звуком - значение последнего бита
+   DbCaution.SignalW:=word_to_bool(DbCaution.MelodyBuffer);   
+  
+   // если последний бит был "1", то заменяем его в MelodyBuffer на "0" 
+   if (DbCaution.SignalW) 
+   then 
+     nw1:=w#16#0001; // (1 xor 1 =0)
+     DbCaution.MelodyBuffer:=DbCaution.MelodyBuffer xor nw1; 
+   end_if; //   if (DbCaution.SignalW) 
+   //сдвиг "звуковой гребёнки" вправо на 1 бит
+   DbCaution.MelodyBuffer:=ror(IN:=DbCaution.MelodyBuffer,N:=1);
+  
+(*
+      1.2. Подача сигнала DbCaution.SignalW из последнего бита на назначенные 
+   выходные дискретные сигналы световой и звуковой сигнализации.
+*)
+
+   //Подача сигнала на SepSignal_Svet1 :
+   if (DbSensBool.ZagazUpr_SepSignal_Svet1.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_SepSignal_Svet1.adr1,
+       DbSensBool.ZagazUpr_SepSignal_Svet1.adr2]:=DbCaution.SignalW;
+   end_if; 
+
+   //Подача сигнала на ZagazUpr_SepSignal_Svet2 :
+   if (DbSensBool.ZagazUpr_SepSignal_Svet2.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_SepSignal_Svet2.adr1,
+       DbSensBool.ZagazUpr_SepSignal_Svet2.adr2]:=DbCaution.SignalW;
+   end_if; 
+
+   //Подача сигнала на ZagazUpr_SepSignal_Zvuk1 :
+   if (DbSensBool.ZagazUpr_SepSignal_Zvuk1.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_SepSignal_Zvuk1.adr1,
+       DbSensBool.ZagazUpr_SepSignal_Zvuk1.adr2]:=DbCaution.SignalW;
+   end_if; 
+
+   //Подача сигнала на ZagazUpr_OperSignal_Svet :
+   if (DbSensBool.ZagazUpr_OperSignal_Svet.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_OperSignal_Svet.adr1,
+       DbSensBool.ZagazUpr_OperSignal_Svet.adr2]:=DbCaution.SignalW;
+   end_if; 
+
+   //Подача сигнала на ZagazUpr_OperSignal_Zvuk :
+   if (DbSensBool.ZagazUpr_OperSignal_Zvuk.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_OperSignal_Zvuk.adr1,
+       DbSensBool.ZagazUpr_OperSignal_Zvuk.adr2]:=DbCaution.SignalW;
+   end_if; 
+
+   //Подача сигнала на ZagazUpr_UouSignal_Svet :
+   if (DbSensBool.ZagazUpr_UouSignal_Svet.Value)
+   then 
+     Q[DbSensBool.ZagazUpr_UouSignal_Svet.adr1,
+       DbSensBool.ZagazUpr_UouSignal_Svet.adr2]:=DbCaution.SignalW;
+   end_if; 
+   
+else 
+(*
+      2. Ситуация : нечего проигрывать в MelodyBuffer - всё проиграно предыдущи-
+   ми вызовами.
+*)
+   
+(*
+      2.1. Аннулирование списка выходных дискретных сигналов, на которых должна 
+   воспроизводиться тревога.
+      Note! Выполняется для возможности реализации выбранного принципа "добавле-
+   ния новой тревоги к ещё непроигранной" (см. Замечания к FcSetCaution).
+      Т.е. правило "если тревога полностью проиграна, то источники сброшены". Для
+   новых тревог : мелодия перезаписывается в MelodyBuffer, а источники доНазнача-
+   ются. Т.о. при наложении по времени разных типов тревог друг на друга, мелодия
+   заменится, а источники сложатся.
+*)
+
+   DbSensBool.ZagazUpr_SepSignal_Svet1.Value:=false;
+   DbSensBool.ZagazUpr_SepSignal_Svet2.Value:=false;
+   DbSensBool.ZagazUpr_SepSignal_Zvuk1.Value:=false;
+   DbSensBool.ZagazUpr_OperSignal_Svet.Value:=false;
+   DbSensBool.ZagazUpr_OperSignal_Zvuk.Value:=false;
+   DbSensBool.ZagazUpr_UouSignal_Svet.Value:=false;
+
+(*
+      2.2. Назначение DbCaution.isActive
+*)
+
+   DbCaution.isActive:=false; //тревога неактивна
+
+ end_if; //if (DbCaution.MelodyBuffer<>w#16#0000) or ..
+ 
+End_Function
+
+
+

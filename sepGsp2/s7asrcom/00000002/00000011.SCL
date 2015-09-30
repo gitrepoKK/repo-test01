@@ -1,0 +1,71 @@
+organization_block obRestart
+
+Title= 'Restart CPU'
+Version: '1.0'
+Author: Konst
+Name: Main1
+Family: Main
+
+var_temp
+ Info : array [0..19] of byte;
+ // Temporary Variables
+ i1,n1 : int;    
+end_var
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Ob100 : Основная ("сепараторная") часть.
+      Note! 
+*)
+      
+ DB291.DBX8.2:=true;  // присваиваем Start_Req=true из Fb1_TestBU для "толчка" начала обмена с Cp441 после перезапуска ПЛК
+
+(*
+      2-Deb. Отладка на стенде. Включение эмуляции для кранов ЭПУУ, клапанов 
+   Sipart и подстановочных значений для Ai-датчиков.
+      Note! Использовать только для отладки!!!. В "рабочем" режиме на объекте 
+   обязательно закоментировать весь п. 2-Deb !!!
+*)
+
+ 
+//* ++++++++++++++++++++++++++++++++ start Emul KrPpu, SipValve, Ai ++++++++++++++++++++++++
+
+// Включение эмуляции сигналов для кранов ЭПУУ и клапанов Sipart
+ DbKranPpuAdr.KranPpuEmul:=true; //false; // эмуляция выключена - используются реальнные сигналы
+ 
+ for i1:=1 to DbSipValve.numSipValve do
+   DbSipValve.SipValveParam[i1].EmulPQW:=true; // эмуляция сигналов PQW включена
+ end_for; // for i1
+ 
+ // Подстановочные значения для Ai-датчиков
+  for n1:=0 to DbSensAI.numSensAIParam do // цикл по числу датчиков на AI-входах
+    DbSensAI.SensAIParam[n1].Value_Subst:=3+n1*3++0.01*n1;
+    DbSensAI.SensAIParam[n1].SubstIncrement:=0.02;
+    DbSensAI.SensAIParam[n1].lblModeSubst:=true;
+    DbSensAI.SensAIParam[n1].lblSubstCalc:=true;
+    DbSensAI.SensAIParam[n1].lblSubstCalcBlow:=true;
+  end_for; // for n1
+
+// Включение эмуляции сигналов от БУ : СИ1, СИ2, СП1, ТГ
+ for i1:=1 to DbSepBu.numSepBuParam do
+   DbSepBu.SepBuParam[i1].EmulBuParam:=true; // эмуляция параметров от i1-го БУ включена
+ end_for; // for i1
+
+
+//* ++++++++++++++++++++++++++++++++ end Emul KrPpu, SipValve, Ai ++++++++++++++++++++++++
+ 
+
+(*
+      3. Ob100 : Дополнительная часть - работа с БУ из УОУ.
+      Note! Скопировано из x_ob_Restart.scl (Cher, проект Ps402)
+*)
+
+///restart  main cycle
+  fb_Restart.idb_fb_Restart();
+    //MessageInit
+//  fb_msg_00.idb_fb_msg_00();
+
+
+end_organization_block
+

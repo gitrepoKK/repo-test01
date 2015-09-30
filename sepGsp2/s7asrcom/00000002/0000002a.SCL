@@ -1,0 +1,96 @@
+FUNCTION fc_MsgIsSet : BOOL  
+
+CONST
+    CRANE   := 0;
+    CRU     := 1;
+    PRESS   := 2;
+    PPRESS  := 3;
+    TEMP    := 4;
+    FLOW    := 5;
+    WORKREG := 6;
+    PIPEMSG := 7;
+    OPER    := 8;
+    INFO    := 9;
+    OTHER   := 10;
+END_CONST 
+
+VAR_INPUT
+    typ         : INT;
+    flag_ack    : BOOL;  //flag := 0, ack := 1
+    p           : INT;
+    pm          : INT;
+    icrane      : INT;
+END_VAR 
+   
+VAR_TEMP
+ndword  :INT;
+nbit    :INT;
+dw      :DWORD;
+END_VAR
+   
+
+ndword      := pm   DIV 32;
+nbit        := pm   MOD 32;
+
+IF NOT flag_ack THEN 
+
+
+    CASE Typ OF 
+        CRANE:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgCrane.flag     [ndword, p, icrane], n := 31 - nbit), n := 31));        
+   
+        CRU:        fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgCru.flag       [ndword, p],        n := 31 - nbit), n := 31));
+        
+        PRESS:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPress.flag     [ndword, p],        n := 31 - nbit), n := 31));
+
+        PRESS:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPPress.flag    [ndword, p],        n := 31 - nbit), n := 31));
+
+        TEMP:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgTemp.flag      [ndword, p],        n := 31 - nbit), n := 31));
+        
+        FLOW:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgFlow.flag      [ndword, p],        n := 31 - nbit), n := 31));
+        
+        WORKREG:    fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgWorkReg.flag   [ndword, p],        n := 31 - nbit), n := 31));
+        
+        PIPEMSG:    fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPipeMsg.flag   [ndword, p],        n := 31 - nbit), n := 31));
+        
+        OPER:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgOper.flag      [ndword, p],        n := 31 - nbit), n := 31));
+        
+        INFO:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgInfo.flag      [ndword, p],        n := 31 - nbit), n := 31));
+        
+        OTHER:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgOther.flag     [ndword, p],        n := 31 - nbit), n := 31));
+
+    ELSE 
+        ;
+    END_CASE;
+    
+ELSE 
+    
+    CASE Typ OF 
+        CRANE:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgCrane.ack       [ndword, p, icrane], n := 31 - nbit), n := 31));        
+   
+        CRU:        fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgCru.ack         [ndword, p],        n := 31 - nbit), n := 31));
+        
+        PRESS:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPress.ack       [ndword, p],        n := 31 - nbit), n := 31));
+
+        PRESS:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPPress.ack      [ndword, p],        n := 31 - nbit), n := 31));
+
+        TEMP:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgTemp.ack        [ndword, p],        n := 31 - nbit), n := 31));
+        
+        FLOW:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgFlow.ack        [ndword, p],        n := 31 - nbit), n := 31));
+        
+        WORKREG:    fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgWorkReg.ack     [ndword, p],        n := 31 - nbit), n := 31));
+        
+        PIPEMSG:    fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgPipeMsg.ack     [ndword, p],        n := 31 - nbit), n := 31));
+        
+        OPER:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgOper.ack        [ndword, p],        n := 31 - nbit), n := 31));
+        
+        INFO:       fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgInfo.ack        [ndword, p],        n := 31 - nbit), n := 31));
+        
+        OTHER:      fc_MsgIsSet := DWORD_TO_BOOL(SHR(in := SHL(in := db_MsgOther.ack       [ndword, p],        n := 31 - nbit), n := 31));
+
+    ELSE 
+        ;
+    END_CASE;
+
+END_IF;
+ 
+END_FUNCTION

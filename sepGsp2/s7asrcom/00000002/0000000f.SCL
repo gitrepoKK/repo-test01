@@ -1,0 +1,274 @@
+(* Fb291_TestBU.scl - Fb291, передача данных через Cp441-2
+*)
+
+//========================================================================
+
+Function_Block Fb291 
+Title = 'Разработка1'
+Version: '1.0'
+Author: Konst
+Name: FbCpExch
+Family: Main
+
+Var_Temp
+ rcvSymbol : Byte; 
+ ni1 : Int;
+End_Var
+
+// Статические переменные
+Var  
+ countCycle : Real:=0.0;
+ dCount : Real:=0.0001;  // приращение счетчиков
+ BreakCount : Bool := false; // Назначается True для сброса счетчиков
+
+// Переменные для SFB/B12 "BSEND"
+ StopSend : Bool := false; // обход вызова BSEND
+ Start_Req : BOOL := true;
+ RestartPostOk : Bool := true;
+ RestartPostErr : Bool := true;
+ RestartPostReceive : Bool := false;
+ NumCpBuf : Int :=1;
+
+ pS_REQ : Bool := true;
+ pS_R : Bool := false;
+ pS_ID : Word :=w#16#1010;   // см. в NetPro какой LocalID на конкретном порту CP
+ pS_R_ID : DWord :=dw#16#0;
+ pS_Len : Word := w#16#06;
+ 
+ pS_DONE : Bool;
+ pS_ERROR : Bool;
+ pS_STATUS : Word;
+
+ pS_REQ_Prev : Bool := false;
+ pS_DONE_Prev : Bool := false;
+ pS_ERROR_Prev : Bool := false;
+ pS_STATUS_Prev : Word := 0;
+ 
+ pS_REQ_Count : Real:=0.0;
+ pS_DONE_Count : Real:=0.0;
+ pS_ERROR_Count : Real:=0.0;
+ pS_STATUS_Count : Real:=0.0;
+ 
+ pS_STATUS_PrevNotNull : Word := 0;
+ 
+// Переменные для SFB/B13 "BRCV"
+
+ StopReceive : Bool := false;
+ Start_EN_R : BOOL := true;
+
+ pR_EN_R : Bool := true;
+ pR_ID : Word; // :=w#16#1010;   // см. в NetPro какой LocalID на конкретном порту CP
+ pR_R_ID : DWord :=dw#16#0;
+ pR_Len : Word := w#16#0;
+
+ pR_NDR : Bool;
+ pR_ERROR : Bool;
+ pR_STATUS : Word;
+
+ pR_EN_R_Prev : Bool := false;
+ pR_NDR_Prev : Bool := false;
+ pR_ERROR_Prev : Bool := false;
+ pR_STATUS_Prev : Word := 0;
+ 
+ pR_EN_R_Count : Real:=0.0;
+ pR_NDR_Count : Real:=0.0;
+ pR_ERROR_Count : Real:=0.0;
+ pR_STATUS_Count : Real:=0.0;
+ 
+ pR_STATUS_PrevNotNull : Word := 0;
+ pR_Len_PrevNotNull : Word := 0;
+ //
+
+
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+(*   
+     1. Подготовка
+
+*)
+
+ if BreakCount  // Обнуление счетчиков
+ then
+  BreakCount:=false;
+  CountCycle:=0;  
+ 
+  pS_REQ_Count:=0;
+  pS_DONE_Count:=0;
+  pS_ERROR_Count:=0;
+  pS_STATUS_Count:=0;
+ 
+  pR_EN_R_Count:=0;
+  pR_NDR_Count:=0;
+  pR_ERROR_Count:=0;
+  pR_STATUS_Count:=0;
+ end_if; 
+
+ CountCycle:=CountCycle + dCount; // счетчик числа вызовов Fb
+
+(*
+     2. Блок Send - Передача данных блоку BRCV удаленного партнера
+ 
+*)
+
+ if not(StopSend)
+ then
+
+//   2.1. Вызов функции BSEND (SFB/B12) - передачи данных блоку BRCV удаленного партнера
+
+  BSEND.db_BSEND(REQ := pS_REQ  // IN: BOOL
+             ,R := pS_R // IN: BOOL
+             ,ID := pS_ID // IN: WORD
+             ,R_ID := pS_R_ID // IN: DWORD
+             ,SD_1 := DbCpBufSend.mSendPar[NumCpBuf] // INOUT: ANY
+             ,LEN := pS_Len // INOUT: WORD
+             ); 
+  pS_DONE := db_BSEND.DONE; // OUT: BOOL
+  pS_ERROR := db_BSEND.ERROR; // OUT: BOOL
+  pS_STATUS := db_BSEND.STATUS; // OUT: WORD
+
+//   2.2. Увеличение счетчиков и запоминание предыдущих значений
+ if pS_REQ<>pS_REQ_Prev then pS_REQ_Count:=pS_REQ_Count + dCount; end_if;
+ if pS_DONE<>pS_DONE_Prev then pS_DONE_Count:=pS_DONE_Count + dCount; end_if;
+ if pS_ERROR<>pS_ERROR_Prev then pS_ERROR_Count:=pS_ERROR_Count + dCount; end_if;
+ if pS_STATUS<>pS_STATUS_Prev then pS_STATUS_Count:=pS_STATUS_Count + dCount; end_if;
+  
+ if ps_STATUS<>0 then pS_STATUS_PrevNotNull:=ps_STATUS; end_if; // запоминание последнего ненулевого Status
+    
+ pS_REQ_Prev:=pS_REQ;
+ pS_DONE_Prev:=pS_DONE;
+ pS_ERROR_Prev:=pS_ERROR;
+ pS_STATUS_Prev:=pS_STATUS;
+ 
+//   2.3. Управление рестартом посылки - установление парметра запроса Req=1 для активирования обмена данными 
+// Note! 06.08.2013 при возобновлении работ всплыла особенность при работе с Cp441 : не запускается после останова ПЛК 
+
+// Сброс фронта сигнала управления запросом
+// Note! Есть у Захарова и Чернова. Зачем ? Вроде бы также работает автоматом
+ if  pS_REQ then
+   pS_REQ:=false;
+   Start_Req:=false;  
+ end_if;
+ 
+// Возобновление посылок после прочих ситуаций ( Run после Stop, ..) 
+ if  (RestartPostOk And pS_DONE) Or (RestartPostErr And pS_ERROR) then
+   pS_REQ:=true;
+ end_if;
+
+// Вручную : с помощью задания  Start_Req=True м. опять активировать фронт сигнала
+ if  Start_Req then
+   pS_REQ:=true;
+ end_if;
+
+// Автоматически по таймеру (или глобальной переменной последего времени запроса)
+//..
+
+end_if; // if not(StopSend) 
+
+(*
+     3. Блок Receive - прием данных от блока BSEND удаленного партнера.
+*)
+
+ pR_ID:=pS_ID; //v3: LocalID соединения при записи\чтении д. совпадать. Он указывает на номер порта CP
+
+ if not(StopReceive)
+ then
+
+//   3.1. Вызов функции BRCV (SFB13) - прием данных от блока BSEND удаленного партнера
+
+  BRCV.db_BRCV(EN_R := pR_EN_R // IN: BOOL
+             ,ID := pR_ID // IN: WORD
+             ,R_ID := pR_R_ID // IN: DWORD
+             ,RD_1 := DbCpBufRcv.RcvDataFloat // INOUT: ANY \ RcvDataBool \ RcvDataInt \ RcvDataFloat !!!!!!!!
+             ,LEN := pR_Len // INOUT: WORD
+             ); 
+    pR_NDR := db_BRCV.NDR; // OUT: BOOL
+    pR_ERROR := db_BRCV.ERROR; // OUT: BOOL
+    pR_STATUS := db_BRCV.STATUS; // OUT: WORD
+    
+(*
+     3.2. Обратная связь. Эксперимент для протокола ASCII.
+    Описание. Cp441 соединен через Rs485 c Moxa-платой, портом Com4. На PC запускается программа
+   PComm Terminal Emulator (далее - PComm). Назначаются одинаковые настройки в PComm на профиль Com4,
+   а для Cp - для протокола ASCII по порту 1 (адрес 1000h), использующему модуль Rs422/485 (X27).
+    Тогда на экране PComm отображаются посланные с пом. BSEND символы. Также в PComm можно нажимать
+   любые клавиши, и тогда введенные символы будут приниматься на Cp с пом. BRCV.
+    Смысл обратной связи - проанализировать нажатый в PComm символ (принятый с пом. BRCV) и в зависимости
+   от него делать последующие BSEND.
+    Реализация. Используется назначение SD_1 := DbCpBufSend.mSendPar[4] (4-й элемент) в BSEND. Там 
+   при инициализации DbCpBufSend записано "=Cp441". Т.о. на экран PComm будет выводиться "=Cp441=Cp441=Cp441"..
+   Нажатие клавиши в PComm анализируется и по нему ("x"):
+    1) этот символ будет отображаться во всех следующих посылках BSEND в 1-й позиции ("xCp441") - реакция
+   на нажатие клавиши
+    2) делается принудительная посылка BSEND - нажатие любой клавиши порождает хотя бы 1 отклик с этим же
+   символом в 1-й позиции ("xCp441")
+    3) При нажатии символа "+" включается режим многократных (беспрерывных) посылок
+    4) При нажатии символа "=" отключается режим многократных (беспрерывных) посылок и после нажатия одной
+   клавиши отображается 1 посылка "xCp441".
+*)
+(*
+  if pR_NDR<>pR_NDR_Prev 
+  then // думаем, что приняли символ с пом. BRCV от партнера
+   rcvSymbol:=DbCpBufRcv.RcvDataInt[1]; 
+   DbCpBufSend.mSendPar[4].DevAddr:=rcvSymbol; // 1-й символ в посылке №4 будет равен введённому символу
+   
+   // Управление по коду введенного символа : 
+   ni1:= byte_to_int(rcvSymbol);
+   Case ni1 Of
+      43 : // 43d="+" : Отображаем после приема многократно
+           NumCpBuf:=4; // посылать 4-й элемент структуры в BSEND
+           RestartPostReceive:=true; // послать после приема
+           RestartPostOk := true; // повторять посылки после завершения
+      61 : // 61d="=" : Отображаем после приема однократно
+           NumCpBuf:=4; // посылать 4-й элемент структуры в BSEND
+           RestartPostReceive:=true; // послать после приема
+           RestartPostOk := false; // НЕ повторять посылки после завершения
+   end_Case;
+  end_if; // if pR_NDR<>pR_NDR_Prev
+*)
+ 
+ // Дополнение к п.2.3. Эксперимент по ASCII - Посылать посылку BSEND, если до этого что-то 
+ // приняли с пом. BRCV :  параметр pR_NDR выполнения задания на чтение изменился
+ if RestartPostReceive And pR_NDR<>pR_NDR_Prev then
+   Start_Req:=true;
+ end_if;
+
+//   3.3. Увеличение счетчиков и запоминание предыдущих значений
+
+ if pR_EN_R<>pR_EN_R_Prev then pR_EN_R_Count:=pR_EN_R_Count + dCount; end_if;
+ if pR_NDR<>pR_NDR_Prev then pR_NDR_Count:=pR_NDR_Count + dCount; end_if;
+ if pR_ERROR<>pR_ERROR_Prev then pR_ERROR_Count:=pR_ERROR_Count + dCount; end_if;
+ if pR_STATUS<>pR_STATUS_Prev then pR_STATUS_Count:=pR_STATUS_Count + dCount; end_if;
+  
+ if pR_STATUS<>0 then pR_STATUS_PrevNotNull:=pR_STATUS; end_if; // запоминание последнего ненулевого Status
+ if pR_Len<>0 then pR_Len_PrevNotNull:=pR_Len; end_if; // запоминание последнего ненулевого Len
+
+ pR_EN_R_Prev:=pR_EN_R;
+ pR_NDR_Prev:=pR_NDR;
+ pR_ERROR_Prev:=pR_ERROR;
+ pR_STATUS_Prev:=pR_STATUS;
+ 
+//   3.4. Управление рестартом приема - установление парметра запроса EN_R=1 для разрешения на прием
+// (сигнализирует о готовности блока к приему данных). 
+
+// Вручную : с помощью задания  Start_EN_R=True м. опять активировать фронт сигнала
+// Note! На практике для ASCII было не нужно.
+ if  Start_EN_R then
+   pR_EN_R:=true;
+ end_if;
+
+ end_if; // if not(StopReceive) 
+ 
+end_function_block
+
+
+//=====================================
+// Объявление Instance Db1 для FB1
+
+Data_Block DB291 FB291
+
+Begin
+
+End_Data_Block
+

@@ -1,0 +1,640 @@
+(* 
+      Fb256_Flow.scl - проведение операций в DbFlowData по расходам газа и жид-
+   кости на основе текущих данных о расходах при наступлении событий EventHDM.
+*)
+
+//========================================================================
+
+Function_Block fb_Flow //Fb256 
+Title = 'Проведение операций в DbFlowData'
+Version: '1.0'
+Author: Konst
+Name: Flow
+Family: Main
+
+Var_Temp
+ i1, j1 : int;
+ n1,n2, ni1, ni2 : int;
+ ndt1,ndt2 : dt;
+ nr1 : real;
+End_Var
+
+// Статические переменные
+Var  
+ TimePlc : dt; // текущее время ПЛК   
+ curMonth, curDay, curHour : int;
+ td1 : time_of_day; //TOD
+
+ NullVal : real :=0.0; // Значение для )
+ NullDebVal : real :=1.2; // Значение для )
+ 
+ DtStr1 : string[22]; // TimePlc в строковом виде: "21.05.14 15:25:34.640"
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+(* 
+      1. Задание и чтение времени ПЛК.
+      Время ПЛК TimePlc считывается в начале п/п в каждом цикле и используется
+   затем как TimeStamp при различных операциях (определение EventHDM (моментов
+   наступления нового расчётного  часа\дня\месяца), длительности продувок и ин-
+   тервалов между ними, и т.д.
+      Также TimePlc необходимо синхронизировать для обеспечения слаженной рабо-
+   ты во всей системе. Это м. сделать разными способами. 
+      Здесь реализован способ синхронизации, когда HMI является "сервером време-
+   ни". Т.е. он задаёт время, которое надо установить на ПЛК.   
+      Алгоритм синхронизации времени через HMI: Периодически HMI формирует "посыл-
+   ку" для синхронизации времени и выставляет флаг DbControl.TimePlcSet=1. "Посыл-
+   ка" состоит из компонент даты целого типа, передавемых в структуре TDateTimeInt
+   (YY, MM, DD, HH, MM, Sec, MSec).
+      По флагу TimePlcSet происходит синхронизация времени с HMI : из компонент
+   формируется время ПЛК и задаётся ПЛК с помощью Set_Clk(). При этом флаг DbControl.
+   lblDtSync_Hmi=0 (сбрасывается) и выставляется флаг DbControl.DtPlc_Change_Event=1 
+   факта изменения TimePlc. Одновременно в переменных time и dint фиксируется ве-
+   личина корректировки времени. На основании их м. формировать сообщения о факте
+   корректировки TimePlc.
+      Notes! n1) Функция установки времени Set_Clk() возвращает : 0 - успешно \ 
+   -32640 (8080) - ош. даты \ -32639 (8081) - ош. времени. Если новое время 
+   пришло с ошибкой (несуществующее дата или время), то корретировки времени не
+   происходит и событие DtPlc_Change_Event не наступает. Флаг lblDtSync_Hmi сбрасывается
+   и м. тоже передать сообщение о неудачной попытке синронизации времени.
+      n2) Такой  способ синхронизации "по событию" с HMI имеет свои достоинства :
+   мы м. его контролировать, наблюдать, управлять. Некоторые идеи :
+          а) М. реализовать дополнительную синхронизацию по запросу с ПЛК : по доп. 
+   флагу посылать HMI, чтобы она прислала своё время.
+          б) Корректировать только на величину, большую XX секунд или только в 
+   "удобное" для ПЛК время (напр., чтобы правильно работал механизм работы с рас-
+   ходами - при перестановках м. происходить "неожиданный" переход в новые расчёт-
+   ные периоды, или возврат в уже завершенные). Как вариант, м. "засечь" требуюмую
+   разницу в корректировке и выполнить "правильно". (При этом м. придти следующая
+   кор-ка или "слишком большая").
+          в) Корректировать на величину +- dT (Напр., 500 мсек)
+          г) Учитывать dT - погрешность при передаче времени через HMI, связанную 
+   с задержками на выполнение операций синхронизации (HMI упаковало, послало \ ПЛК
+   назаначило, но получилась задержка)
+          д) М. добавить обработку события DtPlc_Change_Event=1 (напр., вывод сообщений,..)
+      n3) В случае реализации этих "достоинств" не забывать о возможности в 
+   дальнейшем другой синхронизации времени (без lblDtSync_Hmi) и не слишком увлекаться :
+   большие скачки времени м.б. только после выключения ПЛК. Остаётся возможный 
+   перевод на летнее\зимнее время. "Дежурную" незначительную синхронизацию м. про-
+   водить запланированно в "середине" расчётного часа. Рекомендуется только для
+   отладки и настройки механизма синхронизации времени через HMI.
+*)
+
+(*
+      1.1. Cинхронизация времени ПЛК с HMI через DtSync_Hmi, lblDtSync_Hmi и 
+   lblDtSync_Hmi_Ignore.
+*)
+
+ if (DbControl.lblDtSync_Hmi) 
+ then //в DbControl.DtSync_Hmi пришли компоненты даты целого типа 
+   DbControl.lblDtSync_Hmi:=false; // сброс флага синхронизации с HMI
+   if not(DbControl.lblDtSync_Hmi_Ignore)
+   then //.. и синхронизация с Hmi не игнорируется
+     ndt2:=FcIntToDt(ObjDtInt:=DbControl.DtSync_Hmi); // время, собранное из int-компонент DtSync_Hmi
+     ni1:=Read_Clk(CDT := ndt1); // чтение системного времени ПЛК (перед синхр.)
+
+     ni1:=Set_Clk(PDT := ndt2); // назначение времени ПЛК
+     if (ni1=0)
+     then //нет ошибок (время с HMI назначено)
+       // вычисление величины корректировки времени
+       ni1:=Read_Clk(CDT := TimePlc); // чтение системного времени ПЛК (после синхр.)
+       DbControl.DtPlc_Change_Value_Time:=SB_DT_DT(DT1 := TimePlc, DT2 := ndt1); //FC34 = DT2-DT1 [-24d20h31m23s648ms;+24d20h31m23s647ms]
+       DbControl.DtPlc_Change_Value_MSec:=TIME_TO_DINT(DbControl.DtPlc_Change_Value_Time);
+
+       // увеличение счетчика корректировок времени 
+       DbControl.DtPlc_Change_Counter:=(DbControl.DtPlc_Change_Counter mod 30000) + 1; // [1-30000] (x mod x =0)
+     
+       DbControl.DtPlc_Change_Event:=1; // выставление флага факта изменения TimePlc через DtSync_Hmi
+     end_if; // if (ni1=0)
+   end_if; // if not(DbControl.lblDtSync_Hmi_Ignore)
+ end_if; // if (DbControl.lblDtSync_Hmi)
+
+(*
+      1.2. Дополнительная (разовая) синхронизация времени ПЛК с HMI через 
+   DtSync_Once и lblDtSync_Once.
+      Note! Алгоритм аналогичен предыдущему (см. п.1.1) (за исключением 
+   lblDtSync_Hmi_Ignore и DtPlc_Change_Event). Не оптимизировано "два в один"
+   из-за того, разовая синронизация на практике почти не применяется (нужен для
+   отладки или как запасной вариант) и тогда этот кусок кода при выполнении прос-
+   то пропускается.
+*)
+
+ if (DbControl.lblDtSync_Once) 
+ then //в DbControl.DtSync_Once находятся компоненты даты целого типа 
+   DbControl.lblDtSync_Once:=false; // сброс флага одноразовой синхронизации
+   ndt2:=FcIntToDt(ObjDtInt:=DbControl.DtSync_Once); // время, собранное из int-компонент DtSync_Once
+   ni1:=Read_Clk(CDT := ndt1); // чтение системного времени ПЛК (перед синхр.)
+
+   ni1:=Set_Clk(PDT := ndt2); // назначение времени ПЛК
+   if (ni1=0)
+   then //нет ошибок (время с HMI назначено)
+     // вычисление величины корректировки времени
+     ni1:=Read_Clk(CDT := TimePlc); // чтение системного времени ПЛК (после синхр.)
+     DbControl.DtPlc_Change_Value_Time:=SB_DT_DT(DT1 := TimePlc, DT2 := ndt1); //FC34 = DT2-DT1 [-24d20h31m23s648ms;+24d20h31m23s647ms]
+     DbControl.DtPlc_Change_Value_MSec:=TIME_TO_DINT(DbControl.DtPlc_Change_Value_Time);
+
+     // увеличение счетчика корректировок времени 
+     DbControl.DtPlc_Change_Counter:=(DbControl.DtPlc_Change_Counter mod 30000) + 1; // [1-30000] (x mod x =0)
+     
+     DbControl.DtPlc_Change_Event:=2; // выставление флага факта изменения TimePlc через DtSync_Once
+   end_if; // if (ni1=0)
+ end_if; // if (DbControl.lblDtSync_Once)
+
+(*
+      1.3. Чтение TimePlc - текущего времени ПЛК (после возможных синхронизаций) 
+   и вычисление из него DbControl.DtPlc_Format_Int - компонент даты целого типа 
+   и DbControl.DtPlc_Format_Str - строкового значения текущего TimePlc
+      Note! Данные о текущем времени в DtPlc_Format_Int используются далее для
+   вычисления EventHDM (см. п.2). А вычисление строкового значения в DtPlc_Format_Str
+   м. не делать для экономии ресурсов, если оно не будет использоваться. (м.б. 
+   как метка текущего времени в сообщениях!)
+*)
+
+//Чтение времени ПЛК (каждый цикл)
+ ni1:=Read_Clk(CDT := TimePlc); // чтение системного времени ПЛК (текущее время ПЛК)
+ //Deb: для Vat-таблиц
+ td1:=DT_TOD(IN:= TimePlc); // FC8 : из TimePlc выделяем время
+ 
+ //вычисление компонент даты целого типа DtPlc_Format_Int из текущего TimePlc 
+ FcDtToInt(ndt1:=TimePlc,ObjDtInt:=DbControl.DtPlc_Format_Int);
+
+
+ //вычисление строкового значения текущего TimePlc для HMI (необязательно)
+ // Notes ! Не обязательно здесь так часто. М. по прерываниям для экономии ресурсов
+ DtStr1:=FcDtIntToStr(ObjDtInt:=DbControl.DtPlc_Format_Int); // полная DT c мсек 
+ // для HMI оставляем часть : (P1\L21-полная DT c мсек |P1\L17 - полная DT без мсек | P10\L8 - только время с сек.)
+ DbControl.DtPlc_Format_Str:=mid(in:=DtStr1, L:=17, P:=1); 
+
+
+(* 
+      2. Вычисление EventHDM - событий о наступлении нового расчётного часа, рас-
+   чётных суток, расчётного месяца. 
+      Алгоритм : 1) Текущее время приводим к формату BCD : YYMMDDHHmmSSms (структура
+   из 7 byte), получаем десятичные значения номера текущего часа curHour, текущего
+   дня curDay, текущего месяца curMonth (это было сделано в п. 1.3. при получении 
+   DtPlc_Format_Int).
+      2) Пересчитываем номер ТЕКУЩЕГО часа в номер РАСЧЁТНОГО часа в зависимости от
+   DbFlowControl.Calc_NumHour - номера расчетного часа в сутках
+      3) Смотрим, изменился ли расчётный час и, если да, то это вызывает цепочку :
+   возникновение EventH и проверок, не наступили ли с новым часом события EventD и 
+   EventM.
+      Notes! n1) Пока считается жёстко, что номер расчетного дня в месяце 
+   DbFlowControl.Calc_NumDay=1. Это связано с усложнением алгоритма перестановок 
+   данных Flow_Day_Arc[] и отображении на ВУ при учёте месяцев с разным кол-вом дней
+   (31\30\28\29). Напр., если бы DbFlowControl.Calc_NumDay был = 5, то 04.02.ХХ - 
+   расчётный день №31 (31-5+1+4), а 04.03.ХХ - расчётный день №28 (28-5+1+4). Если
+   же номер расчетного дня в месяце=1, то всё упрощается : не надо учитывать число
+   "академичеких" дней в месяце и номер текущих суток равен номеру расчётных суток
+   всегда. (На КУПХГ номер расчетного дня в месяце=1).
+    n2) 28.08.14 : Идея после перерыва : EventD и EventM вычислять не только при 
+   новом расчетном часе =1, а если текущий меньше предыдущего.
+    02.09.14 : Правильнее м. так : при EventH если расчётный час в [1-13] (диапазон
+   новых расчётных суток в обычных сутках), то проверяем EentDM сравнением с предыдущим
+*)
+
+ curHour:= DbControl.DtPlc_Format_Int.Hour; 
+ curDay:=  DbControl.DtPlc_Format_Int.Day;
+ curMonth:=DbControl.DtPlc_Format_Int.Month;
+
+(*
+      2.1. Вычисление номеров РАСЧЁТНОГО часа, суток и месяца.
+*)
+
+ //Вычисление номера РАСЧЁТНОГО часа DbFlowControl.Num_Hour_Current из ТЕКУЩЕГО
+ DbFlowControl.Num_Hour_Current:=curHour-DbFlowControl.Calc_NumHour+1;
+ if (curHour<DbFlowControl.Calc_NumHour)
+ then // для [0-9] (при Num_Hour_Current=10)
+   DbFlowControl.Num_Hour_Current:=DbFlowControl.Num_Hour_Current+24;
+ end_if; // if (curHour<DbFlowControl.Calc_NumHour)
+
+ //Вычисление номеров РАСЧЁТНЫХ суток и месяца (см. n1)  
+ DbFlowControl.Num_Day_Current:=curDay;
+ DbFlowControl.Num_Month_Current:=curMonth;
+ 
+(*
+      2.2. Вычисление EventHDM.
+      Note! 28.08.14 : см n2). 
+*)
+
+ if (DbFlowControl.Num_Hour_Current<>DbFlowControl.Num_Hour_Prev) 
+ then // расчётный час изменился
+   DbFlowControl.Ev_Hour_Next:=true; // EventH - новый рачётный час
+   DbFlowControl.Num_Hour_Prev:=DbFlowControl.Num_Hour_Current; // Рано !!! 29.04
+
+   //Вычисление EventD и EventМ при наступлении новых
+   //Проверка на наступление EventD   
+   (*
+   Зачем условие или оставить и каждый час : вдруг пропустили новый час=1 и EventDM не произойдет ?
+   Корректно ли если EventDM при DbFlowControl.Num_Hour_Current>1 ?
+   *) 
+   if (DbFlowControl.Num_Hour_Current=1) 
+   then // новые расчетные суткм
+     if (DbFlowControl.Num_Day_Current<>DbFlowControl.Num_Day_Prev) 
+     then // новые сутки
+       DbFlowControl.Ev_Day_Next:=true; 
+       DbFlowControl.Num_Day_Prev:=DbFlowControl.Num_Day_Current; 
+     end_if; // (DbFlowControl.Num_Day_Current<>DbFlowControl.Num_Day_Prev)  
+    
+     if (DbFlowControl.Num_Month_Current<>DbFlowControl.Num_Month_Prev) 
+     then // новый месяц
+       DbFlowControl.Ev_Month_Next:=true; 
+       DbFlowControl.Num_Month_Prev:=DbFlowControl.Num_Month_Current; 
+     end_if; // if (DbFlowControl.Num_Month_Current<>DbFlowControl.Num_Month_Prev)  
+   end_if; // if (DbFlowControl.Num_Hour_Current=1)  
+
+ end_if; // (DbFlowControl.Num_Hour_Current<>DbFlowControl.Num_Hour_Prev)  
+
+(*
+      3. Обработка параметров из db_PIPE.
+*)
+
+(*
+      3.1. Обработка параметров из db_PIPE для БУ СИ1, СИ2, СП.
+      Notes! n1) При учитывании перехода границы X зацикленного счётчика РГ за 
+    сезон в БУ (BoundBuCount=[0-X]) предполагается, что за один час счётчик БУ 
+    не совершит более 1 круга (т.е. расход за час заведомо меньше BoundBuCount)
+    (Иначе надо учитывать "круги" за час для каждого счётчика БУ). 
+      На практике это реально, т.к. в БУ X=900000 (очень много) и нет механизма
+    его сбрасывания.
+      n2) Установлено "опытным" путём, что при операциях c Real в Step7 идёт 
+    окруление при сложении, если число > XX XXX.XX (больше 7 разрядов). У нас 
+    XXX XXX.XX. "Сотые" округляются : 0,36 => 0,40 \ 0,449=> 0,40 \ 0,50 => 0,50
+    (стандартные правила округления : [0,01-0,499] => 0,00 \ [0,50-0,999] => 0,10 ).
+      Часовой расход вряд ли будет >99 999.99. Но как быть с другими расчетами?
+*)
+
+  for n1:=1 to 3 do // Всего 4 БУ : работаем с первыми тремя : СИ1, СИ2, СП1    
+    //DbFlowData.FlowData[n1].Flow_Instant_Current:=DbSepBu.SepBuParam[n1].Flow_RVal*3600; //мгновенный за час пересчитываем в мгновенный за сек.
+    DbFlowData.FlowData[n1].Flow_Instant_Current:=DbSepBu.SepBuParam[n1].Flow_RFlowHour*3600; //изм. 28.11.14 "Flow_RVal" =>"Flow_RFlowHour"
+    DbFlowData.FlowData[n1].Flow_Season_BU:=DbSepBu.SepBuParam[n1].Flow_RCnt; // расход за сезон из БУ (для справки)
+
+    //надо учесть "нет связи" "900000"
+    
+    // Отслеживание перехода границы X зацикленного счетчика расхода газа на сезон ([0-X])
+    if (DbFlowData.FlowData[n1].Flow_Season_BU>=DbFlowData.FlowData[n1].Flow_Instant_Prev)
+    then // не достигли граицы сброса BoundBuCount
+      DbFlowData.FlowData[n1].Flow_Hour_Current:=
+        DbFlowData.FlowData[n1].Flow_Season_BU-DbFlowData.FlowData[n1].Flow_Instant_Prev;
+    else // перешли границу в текущем часу
+      DbFlowData.FlowData[n1].Flow_Hour_Current:=DbFlowControl.BoundBuCount-
+        DbFlowData.FlowData[n1].Flow_Instant_Prev+DbFlowData.FlowData[n1].Flow_Season_BU;
+    end_if; //if (DbFlowData.FlowData[n1].Flow_Season_BU>=   
+    
+  end_for; // for n1
+
+(* 
+      4. Инициализация данных и сброс счётчиков по флагам с ВУ.
+      Алгоритм : Сброс счётчиков м.б. индивидульным (для каждого счёчика отдельный),
+   или общий. При общем сбросе сбрасываются все индивидуальные счетчики + 3 допол-
+   нительных счётчика.
+      При инициализации всех данных выполняется сброс всех счётчиков + "обнуление"
+   всех архивов.
+      Флаги, вызвавшие какие-либо действия, восстанавливаются после завершения
+   действий.
+      Notes! n1) В цикл обработки включен и 0-й элемент, служащий буфером для 
+   передачи на ВУ по заказу любого из оставшихся элементов FlowData[1-7]. Это
+   м. не делать, но "кашу маслом.."
+      n2) М. ещё завести 1 флаг Reset_Data_All на обнуление всех FlowData[0-7]
+   сразу (пока у каждого элемента свои флаги)
+      n3) Применяется метод "сверху-вниз" - возможные действия перекладываем на
+   другие флаги (и они в свою очередь обработаются и действия выполнятся)   
+*)
+
+(*
+      4.1. Обработка флага DbFlowControl.Reset_Data_All - инициализация данных
+   по всем параметрам.
+*)
+
+  if (DbFlowControl.Reset_Data_All)
+  then // выставляем флаги инициализации данных для каждого параметра
+    for i1:=0 to DbFlowData.numFlowData do DbFlowData.FlowData[i1].Reset_Data:=true; end_for;
+
+    DbFlowControl.Reset_Data_All:=false; // снятие флага
+  end_if; //if (DbFlowControl.Reset_Data_All)
+
+(*
+      4.2. Цикл по числу записей в DbFlowData.FlowData[] (Инициализация 
+   данных и сброс счётчиков)
+*)
+  
+  for n1:=0 to DbFlowData.numFlowData do // 
+// Deb : заменено NullVal => NullDebVal  потом надо вернуть !!!!!!!!!!!!!!!!!
+ // NullDebVal:=NullVal+n1*10;  
+
+(* 
+      4.2.1. Инициализация (обнуление) всех данных по параметру.
+*)
+
+    if (DbFlowData.FlowData[n1].Reset_Data)   
+    then 
+      DbFlowData.FlowData[n1].Reset_Count_All:=true; //сброс всех счётчиков по параметру
+    
+      //обнуление архивов
+      for i1:=1 to DbFlowControl.NumHour do DbFlowData.FlowData[n1].Flow_Hour_Arc[i1]:=NullVal; end_for;
+      for i1:=1 to DbFlowControl.NumDay do DbFlowData.FlowData[n1].Flow_Day_Arc[i1]:=NullVal; end_for;
+      for i1:=1 to DbFlowControl.NumMonth do DbFlowData.FlowData[n1].Flow_Month_Arc[i1]:=NullVal; end_for;
+   
+      DbFlowData.FlowData[n1].Reset_Data:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData.Reset_Data)
+        
+(* 
+      4.2.2. Сброс всех счётчиков по параметру.
+*)
+
+    if (DbFlowData.FlowData[n1].Reset_Count_All)   
+    then 
+      DbFlowData.FlowData[n1].Reset_Count_Hour:=true; 
+      DbFlowData.FlowData[n1].Reset_Count_Day:=true; 
+      DbFlowData.FlowData[n1].Reset_Count_Month:=true; 
+      DbFlowData.FlowData[n1].Reset_Count_Test:=true; 
+      DbFlowData.FlowData[n1].Reset_Count_Season:=true; 
+    
+      //обнуление 3-х дополнительных счётчиков, у которых нет индивидуального сброса
+      // Note! М.б. перенести в блок инициализации всех данных
+      // 28.11.14 : правильно ли для Flow_Instant_Prev и Flow_Instant_Prev ???????????
+      DbFlowData.FlowData[n1].Flow_Instant_Current:=NullVal;
+      //DbFlowData.FlowData[n1].Flow_Instant_Prev:=NullVal;
+      //DbFlowData.FlowData[n1].Flow_Season_BU:=NullVal;
+ 
+      DbFlowData.FlowData[n1].Reset_Count_All:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData.Reset_Count_All)
+    
+(* 
+      4.2.3. Сброс индивидуальных счётчиков по параметру.
+*)
+
+    //сброс счётчиков за час
+    if (DbFlowData.FlowData[n1].Reset_Count_Hour)   
+    then    
+      DbFlowData.FlowData[n1].Flow_Hour_Current:=NullVal;
+      DbFlowData.FlowData[n1].Flow_Hour_Prev:=NullVal;
+      DbFlowData.FlowData[n1].Reset_Count_Hour:=false; // снятие флага
+
+      // добавлено 28.11.14 для перефиксации накопительного  расхода за сезон для РГ на БУ
+      // путём вычитания из накопительного за сезон - запоминаем новое "опорное" Flow_Instant_Prev
+      //Note! 07.10.14 Не повлияет ли на РЖ - Расход Жидкости (м. n1=[1,4] для следующего оператора?)
+      DbFlowData.FlowData[n1].Flow_Instant_Prev:=DbFlowData.FlowData[n1].Flow_Season_BU;
+    end_if; // if (DbFlowData.FlowData[n1].Reset_Count_Hour)
+
+    //сброс счётчиков за сутки
+    if (DbFlowData.FlowData[n1].Reset_Count_Day)   
+    then    
+      DbFlowData.FlowData[n1].Flow_Day_Current:=NullVal;
+      DbFlowData.FlowData[n1].Flow_Day_Prev:=NullVal;
+      DbFlowData.FlowData[n1].Reset_Count_Day:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Reset_Count_Day)
+
+    //сброс счётчиков за месяц
+    if (DbFlowData.FlowData[n1].Reset_Count_Month)   
+    then    
+      DbFlowData.FlowData[n1].Flow_Month_Current:=NullVal;
+      DbFlowData.FlowData[n1].Flow_Month_Prev:=NullVal;
+      DbFlowData.FlowData[n1].Reset_Count_Month:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Reset_Count_Month)
+
+    //сброс счётчиков за тест (замер)
+    if (DbFlowData.FlowData[n1].Reset_Count_Test)   
+    then    
+      DbFlowData.FlowData[n1].Flow_Test_Current:=NullVal;
+      DbFlowData.FlowData[n1].Flow_Test_Prev:=NullVal;
+      DbFlowData.FlowData[n1].Reset_Count_Test:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Reset_Count_Test)
+
+    //сброс счётчиков за сезон
+    // Note! 07.10.14 М.б. сбрасывать ещё Flow_Season_BU - счётчик за сезон из БУ?
+    if (DbFlowData.FlowData[n1].Reset_Count_Season)   
+    then    
+      DbFlowData.FlowData[n1].Flow_Season:=NullVal;
+      DbFlowData.FlowData[n1].Reset_Count_Season:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Reset_Count_Season)
+  
+  end_for; // for n1:=1.. 
+
+(* 
+      5. Отслеживание запроса с ВУ на копирование информации в 0-й элемент
+   FlowData[0] i-го элемента FlowData[i] (i=[1-7]).
+      Алгоритм. Если DbFlowControl.HmiNum_To_Copy>0 (и лежит в допустимом диапазоне),
+   то копируются все элементы из FlowData[i] и ставятся отметки о копировании.
+      Notes! n1) Надо ли обнулять HmiNum_To_Copy, если его значение вне диапазона?
+      n2) М. завести флаг NonStop_Copy на постоянное копирование - тогда на ВУ м. 
+   смотреть "динамическую" картину об выбранном элементе. Для проведения "разовых"
+   операций с FlowData[0] этот флаг надо будет отключить. Вообще постоянное копиро-
+   вание отнимает ресурсы, а динамика там нечастая - м.б. только для отладки?..  
+      n3) NonStop_Copy действует только при следующих назначениях HmiNum_To_Copy!
+*)
+  
+  n1:=DbFlowControl.HmiNum_To_Copy; //какой элемент из DbFlowData копировать в 0-й (0-скопировано\[1-7]-запрос)
+  if (n1>0 and n1<=DbFlowData.numFlowData)
+  then // запрос с ВУ на копирование и номер эл-та лежит в допустимом диапазоне
+    // копирование счётчиков
+    DbFlowData.FlowData[0].Flow_Instant_Current:=DbFlowData.FlowData[n1].Flow_Instant_Current;
+    DbFlowData.FlowData[0].Flow_Instant_Prev:=DbFlowData.FlowData[n1].Flow_Instant_Prev;
+    DbFlowData.FlowData[0].Flow_Hour_Current:=DbFlowData.FlowData[n1].Flow_Hour_Current;
+    DbFlowData.FlowData[0].Flow_Hour_Prev:=DbFlowData.FlowData[n1].Flow_Hour_Prev;
+    DbFlowData.FlowData[0].Flow_Day_Current:=DbFlowData.FlowData[n1].Flow_Day_Current;
+    DbFlowData.FlowData[0].Flow_Day_Prev:=DbFlowData.FlowData[n1].Flow_Day_Prev;
+    DbFlowData.FlowData[0].Flow_Month_Current:=DbFlowData.FlowData[n1].Flow_Month_Current;
+    DbFlowData.FlowData[0].Flow_Month_Prev:=DbFlowData.FlowData[n1].Flow_Month_Prev;
+    DbFlowData.FlowData[0].Flow_Test_Current:=DbFlowData.FlowData[n1].Flow_Test_Current;
+    DbFlowData.FlowData[0].Flow_Test_Prev:=DbFlowData.FlowData[n1].Flow_Test_Prev;
+    DbFlowData.FlowData[0].Flow_Season:=DbFlowData.FlowData[n1].Flow_Season;
+    DbFlowData.FlowData[0].Flow_Season_BU:=DbFlowData.FlowData[n1].Flow_Season_BU;
+
+    // копирование архивов
+    for i1:=1 to DbFlowControl.NumHour do DbFlowData.FlowData[0].Flow_Hour_Arc[i1]:=DbFlowData.FlowData[n1].Flow_Hour_Arc[i1]; end_for;
+    for i1:=1 to DbFlowControl.NumDay do DbFlowData.FlowData[0].Flow_Day_Arc[i1]:=DbFlowData.FlowData[n1].Flow_Day_Arc[i1]; end_for;
+    for i1:=1 to DbFlowControl.NumMonth do DbFlowData.FlowData[0].Flow_Month_Arc[i1]:=DbFlowData.FlowData[n1].Flow_Month_Arc[i1]; end_for;
+
+    //отметка о копировании
+    DbFlowControl.Num_In_Copy:=n1; //номер скопированного эл-та
+    DbFlowControl.TimeStamp_Copy:=TimePlc; //метка времени в момент копирования
+    if not(DbFlowControl.NonStop_Copy) 
+    then //копирование 1 раз 
+      DbFlowControl.HmiNum_To_Copy:=0; //0-скопировано
+    end_if; //if not(DbFlowControl.NonStop_Copy) 
+  end_if; // if (n1>0 and n1<=DbFlowData.numFlowData)
+ 
+(* 
+      6. Включение \ выключение режима теста (замера).
+*)
+
+  for n1:=1 to DbFlowData.numFlowData do // с 1-го элемента
+
+    if (DbFlowData.FlowData[n1].Test_Start)   
+    then // запуск теста   
+      DbFlowData.FlowData[n1].Test_TimeStart:=TimePlc; //метка времени в момент начала теста
+      DbFlowData.FlowData[n1].Test_GoOn:=true; // тест включен (активен)
+      DbFlowData.FlowData[n1].Test_Start:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Test_Start)
+  
+    if (DbFlowData.FlowData[n1].Test_End)   
+    then // останов теста   
+      //добавляем остатки за текущий тест 
+      DbFlowData.FlowData[n1].Flow_Test_Current:=
+      DbFlowData.FlowData[n1].Flow_Test_Current+DbFlowData.FlowData[n1].Flow_Hour_Current;  
+ 
+      DbFlowData.FlowData[n1].Test_TimeEnd:=TimePlc; //метка времени в момент окончания теста
+      DbFlowData.FlowData[n1].Test_GoOn:=false; // тест выключен (НЕ активен)
+      DbFlowData.FlowData[n1].Test_End:=false; // снятие флага
+    end_if; // if (DbFlowData.FlowData[n1].Test_End)
+
+  end_for; // for n1:=1.. 
+
+(* 
+      7. Отслеживание изменения номера расчётного часа и номера расчётных
+   суток.   
+      Notes! n1) Переносим на потом. Расчетный день пока всегда=1. А для смены 
+   расчётного часа м.б. потребуется ещё 1 bool
+*)
+
+(* 
+      8. Выполнение действий при наступлении событий EventHDM : Ev_Hour_Next-
+   новый час \ Ev_Day_Next - новые расчетные сутки \ Ev_Month_Next - новый рас-
+   четный месяц.  
+      Notes! n1) Как правильно : H=>D=>M или M=>D=>H и надо ли вычислять события здесь???
+*)
+
+(* 
+      8.1. Выполнение действий при наступлении события Ev_Month_Next - новый рас-
+   четный месяц.
+*)
+
+  if (DbFlowControl.Ev_Month_Next)   
+  then // Ev : наступил новый расчётный месяц Num_Month_Next   
+    for n1:=1 to DbFlowData.numFlowData do // с 1-го элемента
+  
+      //переписываем "за месяц" : Текущий в Предыдущий
+      DbFlowData.FlowData[n1].Flow_Month_Prev:=
+      DbFlowData.FlowData[n1].Flow_Month_Current; // 
+
+      //сброс счётчика за текущий месяц
+      DbFlowData.FlowData[n1].Flow_Month_Current:=NullVal;
+      
+      //перетасовка архива суточных значений : [1-31] => [32-62]  и обнуление [1-31]
+      //Note! Предусмотреть если DbFlowControl.NumDay<>62 и м.б. перенести в п.5.2)
+      for i1:=1 to 31 do 
+      //  DbFlowData.FlowData[n1].Flow_Day_Arc[i1+31]:=DbFlowData.FlowData[n1].Flow_Day_Arc[i1];
+        DbFlowData.FlowData[n1].Flow_Day_Arc[i1]:=NullVal; 
+      end_for;
+
+      //в архив месячных значений DbFlowControl.Num_Hour_Prev
+      n2:=DbFlowControl.Num_Month_Prev-1; //n2 - только что
+      if n2<1 then n2:=12; end_if;
+
+      DbFlowData.FlowData[n1].Flow_Month_Arc[n2]:=DbFlowData.FlowData[n1].Flow_Month_Prev; 
+
+    end_for; // for n1:=1.. 
+ 
+    //инверсия тега для архивирования на ВУ
+    DbFlowControl.lblCalc_Month_Prev:=not(DbFlowControl.lblCalc_Month_Prev); 
+    
+    DbFlowControl.Ev_Month_Next:=false; // снятие флага
+  end_if; // if (DbFlowControl.Ev_Month_Next)
+
+(* 
+      8.2. Выполнение действий при наступлении события Ev_Day_Next - новые 
+   расчетные сутки.
+*)
+
+  if (DbFlowControl.Ev_Day_Next)   
+  then // Ev : наступили новые расчётные сутки Num_Day_Next   
+    for n1:=1 to DbFlowData.numFlowData do // с 1-го элемента
+  
+      //переписываем "за сутки" : Текущие в Предыдущие
+      DbFlowData.FlowData[n1].Flow_Day_Prev:=
+      DbFlowData.FlowData[n1].Flow_Day_Current; // 
+
+      //сброс счётчика за текущие сутки
+      DbFlowData.FlowData[n1].Flow_Day_Current:=NullVal;
+
+      //в архив суточных значений
+      n2:=DbFlowControl.Num_Day_Prev-1; //n2 - только что
+      if n2<1 then n2:=31; end_if;  //для неполных месяцев неправильно
+ 
+      DbFlowData.FlowData[n1].Flow_Day_Arc[n2]:=DbFlowData.FlowData[n1].Flow_Day_Prev; // 
+
+    end_for; // for n1:=1.. 
+ 
+    // инверсия тега для архивирования на ВУ
+    DbFlowControl.lblCalc_Day_Prev:=not(DbFlowControl.lblCalc_Day_Prev); 
+    
+    DbFlowControl.Ev_Day_Next:=false; // снятие флага
+  end_if; // if (DbFlowControl.Ev_Day_Next)
+
+(* 
+      8.3. Выполнение действий при наступлении события Ev_Hour_Next - новый час
+      Notes! n1) Flow_Hour_Current в момент нового часа 23:00 содержит данные 
+   за ]22:00-23:00]\ Num_Hour_Current=14 (23-24)\ Num_Hour_Prev=13 (22-23)\
+      n2) В момент EventH нового часа : Num_Hour_Current - уже новый только что
+   начавшийся час \ Num_Hour_Prev - только что закончившийся час. Данные по закон-
+   чившемуся часу фиксируем, а по начавшемуся - обнуляем.
+*)
+
+  if (DbFlowControl.Ev_Hour_Next)   
+  then // Ev : наступил новый час Num_Hour_Next   
+    for n1:=1 to DbFlowData.numFlowData do // с 1-го элемента
+   
+      //Note! 07.10.14 Не повлияет ли на РЖ - Расход Жидкости (м. n1=[1,4] для следующего оператора?)
+      DbFlowData.FlowData[n1].Flow_Instant_Prev:=DbFlowData.FlowData[n1].Flow_Season_BU;
+   
+      //копирование архивных часовых данных за сутки : Текущие в Предыдущие
+      //Note! Делаем после 1-го часа : в течении 1-го часа всё равно данных ещё 
+      //не было и оставляем в этот час смотреть часовые отчеты за 2-е суток из 
+      //Flow_Hour_Arc[48]
+      if (DbFlowControl.Num_Hour_Current=2)
+      then // кончился 1-й час суток и начался второй
+        //перетасовка архива часовых значений : [1-24] => [25-48]  и обнуление [1-24]
+        //Note! Предусмотреть если DbFlowControl.NumHour<>48
+        for i1:=1 to 24 do 
+          DbFlowData.FlowData[n1].Flow_Hour_Arc[i1+24]:=DbFlowData.FlowData[n1].Flow_Hour_Arc[i1];
+          DbFlowData.FlowData[n1].Flow_Hour_Arc[i1]:=NullVal; 
+        end_for; // for i1:=1 to 24
+      end_if; // if (DbFlowData.FlowData[n1].Flow_Hour_Current=2) 
+ 
+      //данные по закончившемуся часу фиксируем (переписываем "за час": Текущий в Предыдущий)
+      DbFlowData.FlowData[n1].Flow_Hour_Prev:=
+      DbFlowData.FlowData[n1].Flow_Hour_Current; 
+            
+      //по начавшемуся часу - обнуляем (сброс счётчика за текущий час)
+ 
+      DbFlowData.FlowData[n1].Flow_Hour_Current:=NullVal;
+      
+      //обновляем за текущие сутки (надо ли - есть при EvM ???)+ не ошибиться с границей суток!
+      DbFlowData.FlowData[n1].Flow_Day_Current:=
+      DbFlowData.FlowData[n1].Flow_Day_Current+DbFlowData.FlowData[n1].Flow_Hour_Prev; 
+ 
+      //обновляем за текущий тест (м.б. каждый цикл?) 
+      if (DbFlowData.FlowData[n1].Test_GoOn)
+      then // режим теста включен
+        DbFlowData.FlowData[n1].Flow_Test_Current:=
+        DbFlowData.FlowData[n1].Flow_Test_Current+DbFlowData.FlowData[n1].Flow_Hour_Prev;
+      end_if; //if (DbFlowData.FlowData[n1].Test_GoOn)
+
+      //обновляем за сезон
+      DbFlowData.FlowData[n1].Flow_Season:=
+      DbFlowData.FlowData[n1].Flow_Season+DbFlowData.FlowData[n1].Flow_Hour_Prev;
+      
+      //в архив часовых значений
+      n2:=DbFlowControl.Num_Hour_Prev-1; //n2 - только что
+      if n2<1 then n2:=24; end_if;
+   
+      DbFlowData.FlowData[n1].Flow_Hour_Arc[n2]:=DbFlowData.FlowData[n1].Flow_Hour_Prev;
+
+    end_for; // for n1:=1.. 
+ 
+    // инверсия тега для архивирования на ВУ
+    DbFlowControl.lblCalc_Hour_Prev:=not(DbFlowControl.lblCalc_Hour_Prev); 
+    
+    DbFlowControl.Ev_Hour_Next:=false; // снятие флага
+  end_if; // if (DbFlowControl.Ev_Hour_Next)
+
+end_function_block
+
+// Объявление Instance Db256 для FB256
+Data_Block idb_fb_Flow fb_Flow
+Begin
+End_Data_Block
+
+
+

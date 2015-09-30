@@ -1,0 +1,724 @@
+(* 
+      $db_mainSet1.scl - Объявление блоков данных :
+      
+         1. Udt TSignalBool
+         2. DbSensBool
+         3. DbKranPpuAdr
+        
+      Notes! n1) Соответствующие udt для этих DataBlock объявлены в $udt_mainSet.scl
+      n2) В этом наборе ($db_mainSet1.scl) собраны блоки данных, имеющих в своих
+   структурах поля с адресами дискретных входных и(или) выходных сигналов, прохо-
+   дящих через модули Siemens и в "Разделе назначения начальных данных" для каждого
+   блока эти адреса конкретно назначены согласно проекту подключения сигналов модулей
+   Siemens к оборудованию. Требует осторожного внимательного обращения! 
+*)
+
+//======================================= >1 ===================================
+
+(*
+      1. TSignalBool - тип данных для хранения информации о простых "булевых" (DI & DO) сигналах
+   подсистем Загазованности, ПТН, Воздухосборника, Линни Импульсных Трубок (кроме DI,DO - сигналов
+   от кранов ЭППУ).
+      Принцип адресов [adr1,adr2] как в TAdrIOSignal. Но учитывая "несложность" работы с сигналами - 
+   (чтение или запись значения), соединены адреса и значения сигналов (x.Value:=I[x.adr1,x.adr2]).
+      Note! При усложнении алгоритма обработки м. либо добавлять эл-ты здесь, либо разнести адреса
+   и значения сигналов (как для кранов ЭППУ). 
+*)
+
+type TSignalBool:   
+ struct
+  adr1 : Int;
+  adr2 : Int;
+  Value : Bool; 
+ end_struct    
+end_type   
+
+//======================================= >2 ===================================
+
+(*
+      2. DbSensBool - блок данных для работы с простыми "булевыми" (DI & DO) сигналами
+   подсистем Загазованности, ПТН, Воздухосборника, Линни Импульсных Трубок (кроме DI,DO - 
+   cигналов от кранов ЭППУ, выделенныых в отдельную структуру TKranPpu). 
+       Принцип работы с такими сигналами : по каждому сигналу хранятся адреса adr1,adr2 для 
+   всех сигналов  DI(I[adr1,adr2]) и DO (Q[adr1,adr2]) и их булевое значение. Для DI-сигналов
+   каждый цикл производится чтение Value=I[adr1,adr2]. Для DO-сигналов по алгоритму изменяется 
+   значение Q[adr1,adr2]=Value. 
+       Notes! n1) В подсистеме загазованности 34 DI-сигналов, разбитых на различные под-объекты
+   и 6 DO-сигналов по управлению сигнализацией(см. ниже). Д.б. соответсвие при объявлении 
+   размерности массива (const)и значениями соотвествующих им переменных (numZagazBlockInSep, 
+   numZagazBlockInUou, numZagazBlockInOper).
+      n2) Обязательно в разделе инициализации задавать правильные значения адресов adr1,adr2 для 
+   всех сигналов  DI(I[adr1,adr2]) и DO (Q[adr1,adr2]).
+*)
+
+Data_Block DbSensBool
+
+Title = 'Значения параметров '
+Author: Konst
+Name: DbZagaz
+Family: Main
+Struct
+ numZagazBlockInSep : int;  
+ numZagazBlockInUou : int;  
+ numZagazBlockInOper : int;  
+ 
+ ZagazPar_SepBlock : Array [1..6,1..2] Of TSignalBool;
+ ZagazPar_OperBlock : Array [1..1,1..2] Of TSignalBool;
+ ZagazPar_UouBlock : Array [1..10,1..2] Of TSignalBool;
+ 
+ ZagazPar_SepCHM10 : TSignalBool;
+ ZagazPar_UouCHM10 : TSignalBool;
+ 
+ PtnPar_HeaterOn : TSignalBool;
+ PtnPar_HeaterBreak : TSignalBool;
+ PtnPar_P_malo : TSignalBool;
+ 
+ VsbPar_P_DoE1Malo : TSignalBool;
+ VsbPar_P_PosleE1Malo : TSignalBool;
+ 
+ LitPar_T_ObrVodii_AvtVkl : TSignalBool;
+ LitPar_ObogrevIT_Vkl : TSignalBool;
+ LitPar_ObogrevIT_Viikl : TSignalBool;
+ LitPar_ObogrevIT_Avariia : TSignalBool;
+ 
+ ZagazUpr_SepSignal_Svet1 : TSignalBool;
+ ZagazUpr_SepSignal_Svet2 : TSignalBool;
+ ZagazUpr_SepSignal_Zvuk1 : TSignalBool;
+ ZagazUpr_OperSignal_Svet : TSignalBool;
+ ZagazUpr_OperSignal_Zvuk : TSignalBool;
+ ZagazUpr_UouSignal_Svet : TSignalBool;
+ 
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+(*
+      2.1. Задание количества элементов в массивах. 
+*)
+
+ numZagazBlockInSep:=6;  // число блоков загазованности в Sep  (д.б. соотв. с 1-й размерностью ZagazPar_SepBlock[,]
+ numZagazBlockInOper:=1; // число блоков загазованности в Oper (д.б. соотв. с 1-й размерностью ZagazPar_OperBlock[,]
+ numZagazBlockInUou:=10; // число блоков загазованности в Uou  (д.б. соотв. с 1-й размерностью ZagazPar_UouBlock[,]
+
+(*
+      2.2. Задание адресов I[adr1,adr2] для DI-сигналов загазованности блоков Сепараторов (6 блоков)
+*)
+ 
+ // адреса сигнала ЗагазСепарат : блок 1 \ порог 1
+ ZagazPar_SepBlock[1,1].adr1:=12; 
+ ZagazPar_SepBlock[1,1].adr2:=0; 
+ // адреса сигнала ЗагазСепарат : блок 1 \ порог 2
+ ZagazPar_SepBlock[1,2].adr1:=12; 
+ ZagazPar_SepBlock[1,2].adr2:=1; 
+
+ // адреса сигнала ЗагазСепарат : блок 2 \ порог 1
+ ZagazPar_SepBlock[2,1].adr1:=12; 
+ ZagazPar_SepBlock[2,1].adr2:=2; 
+ // адреса сигнала ЗагазСепарат : блок 2 \ порог 2
+ ZagazPar_SepBlock[2,2].adr1:=12; 
+ ZagazPar_SepBlock[2,2].adr2:=3; 
+
+ // адреса сигнала ЗагазСепарат : блок 3 \ порог 1
+ ZagazPar_SepBlock[3,1].adr1:=12; 
+ ZagazPar_SepBlock[3,1].adr2:=4; 
+ // адреса сигнала ЗагазСепарат : блок 3 \ порог 2
+ ZagazPar_SepBlock[3,2].adr1:=12; 
+ ZagazPar_SepBlock[3,2].adr2:=5; 
+
+ // адреса сигнала ЗагазСепарат : блок 4 \ порог 1
+ ZagazPar_SepBlock[4,1].adr1:=12; 
+ ZagazPar_SepBlock[4,1].adr2:=6; 
+ // адреса сигнала ЗагазСепарат : блок 4 \ порог 2
+ ZagazPar_SepBlock[4,2].adr1:=12; 
+ ZagazPar_SepBlock[4,2].adr2:=7; 
+
+ // адреса сигнала ЗагазСепарат : блок 5 \ порог 1
+ ZagazPar_SepBlock[5,1].adr1:=13; 
+ ZagazPar_SepBlock[5,1].adr2:=1; //0; 
+ // адреса сигнала ЗагазСепарат : блок 5 \ порог 2
+ ZagazPar_SepBlock[5,2].adr1:=13; 
+ ZagazPar_SepBlock[5,2].adr2:=2; //1; 
+
+ // адреса сигнала ЗагазСепарат : блок 6 \ порог 1
+ ZagazPar_SepBlock[6,1].adr1:=13; 
+ ZagazPar_SepBlock[6,1].adr2:=3; //2; 
+ // адреса сигнала ЗагазСепарат : блок 6 \ порог 2
+ ZagazPar_SepBlock[6,2].adr1:=13; 
+ ZagazPar_SepBlock[6,2].adr2:=4; //3; 
+
+(*
+      2.3. Задание адресов I[adr1,adr2] для DI-сигналов загазованности блоков Операторной
+   (сейчас 1 блок)
+*)
+
+ // адреса сигнала ЗагазОперат : блок 1 \ порог 1
+ ZagazPar_OperBlock[1,1].adr1:=13; 
+ ZagazPar_OperBlock[1,1].adr2:=6; //5; 
+ // адреса сигнала ЗагазОперат : блок 1 \ порог 2
+ ZagazPar_OperBlock[1,2].adr1:=13; 
+ ZagazPar_OperBlock[1,2].adr2:=7; //6; 
+
+(*
+      2.4. Задание адресов I[adr1,adr2] для DI-сигналов загазованности блоков УОУ (10 блоков)
+*)
+
+ // адреса сигнала ЗагазУОУ : блок 1 \ порог 1
+ ZagazPar_UouBlock[1,1].adr1:=9; 
+ ZagazPar_UouBlock[1,1].adr2:=0; 
+ // адреса сигнала ЗагазУОУ : блок 1 \ порог 2
+ ZagazPar_UouBlock[1,2].adr1:=9; 
+ ZagazPar_UouBlock[1,2].adr2:=1; 
+
+ // адреса сигнала ЗагазУОУ : блок 2 \ порог 1
+ ZagazPar_UouBlock[2,1].adr1:=9; 
+ ZagazPar_UouBlock[2,1].adr2:=2; 
+ // адреса сигнала ЗагазУОУ : блок 2 \ порог 2
+ ZagazPar_UouBlock[2,2].adr1:=9; 
+ ZagazPar_UouBlock[2,2].adr2:=3; 
+
+ // адреса сигнала ЗагазУОУ : блок 3 \ порог 1
+ ZagazPar_UouBlock[3,1].adr1:=9; 
+ ZagazPar_UouBlock[3,1].adr2:=4; 
+ // адреса сигнала ЗагазУОУ : блок 3 \ порог 2
+ ZagazPar_UouBlock[3,2].adr1:=9; 
+ ZagazPar_UouBlock[3,2].adr2:=5; 
+
+ // адреса сигнала ЗагазУОУ : блок 4 \ порог 1
+ ZagazPar_UouBlock[4,1].adr1:=9; 
+ ZagazPar_UouBlock[4,1].adr2:=6; 
+ // адреса сигнала ЗагазУОУ : блок 4 \ порог 2
+ ZagazPar_UouBlock[4,2].adr1:=9; 
+ ZagazPar_UouBlock[4,2].adr2:=7; 
+
+ // адреса сигнала ЗагазУОУ : блок 5 \ порог 1
+ ZagazPar_UouBlock[5,1].adr1:=10; 
+ ZagazPar_UouBlock[5,1].adr2:=0; 
+ // адреса сигнала ЗагазУОУ : блок 5 \ порог 2
+ ZagazPar_UouBlock[5,2].adr1:=10; 
+ ZagazPar_UouBlock[5,2].adr2:=1; 
+
+ // адреса сигнала ЗагазУОУ : блок 6 \ порог 1
+ ZagazPar_UouBlock[6,1].adr1:=10; 
+ ZagazPar_UouBlock[6,1].adr2:=2; 
+ // адреса сигнала ЗагазУОУ : блок 6 \ порог 2
+ ZagazPar_UouBlock[6,2].adr1:=10; 
+ ZagazPar_UouBlock[6,2].adr2:=3; 
+
+ // адреса сигнала ЗагазУОУ : блок 7 \ порог 1
+ ZagazPar_UouBlock[7,1].adr1:=10; 
+ ZagazPar_UouBlock[7,1].adr2:=4; 
+ // адреса сигнала ЗагазУОУ : блок 7 \ порог 2
+ ZagazPar_UouBlock[7,2].adr1:=10; 
+ ZagazPar_UouBlock[7,2].adr2:=5; 
+
+ // адреса сигнала ЗагазУОУ : блок 8 \ порог 1
+ ZagazPar_UouBlock[8,1].adr1:=10; 
+ ZagazPar_UouBlock[8,1].adr2:=6; 
+ // адреса сигнала ЗагазУОУ : блок 8 \ порог 2
+ ZagazPar_UouBlock[8,2].adr1:=10; 
+ ZagazPar_UouBlock[8,2].adr2:=7; 
+
+ // адреса сигнала ЗагазУОУ : блок 9 \ порог 1
+ ZagazPar_UouBlock[9,1].adr1:=11; 
+ ZagazPar_UouBlock[9,1].adr2:=0; 
+ // адреса сигнала ЗагазУОУ : блок 9 \ порог 2
+ ZagazPar_UouBlock[9,2].adr1:=11; 
+ ZagazPar_UouBlock[9,2].adr2:=1; 
+
+ // адреса сигнала ЗагазУОУ : блок 10 \ порог 1
+ ZagazPar_UouBlock[10,1].adr1:=11; 
+ ZagazPar_UouBlock[10,1].adr2:=2; 
+ // адреса сигнала ЗагазУОУ : блок 10 \ порог 2
+ ZagazPar_UouBlock[10,2].adr1:=11; 
+ ZagazPar_UouBlock[10,2].adr2:=3; 
+
+(*
+      2.5. Задание адресов I[adr1,adr2] для DI-сигналов газосигнализаторов СНМ-10 сепараторов
+   и УОУ подсистемы загазованности (по 1 шт).
+*)
+
+ // адреса сигнала "Газосигнализатор СНМ-10 Сепарат" :
+ ZagazPar_SepCHM10.adr1:=13; 
+ ZagazPar_SepCHM10.adr2:=5; //4; 
+
+ // адреса сигнала "Газосигнализатор СНМ-10 УОУ" :
+ ZagazPar_UouCHM10.adr1:=11; 
+ ZagazPar_UouCHM10.adr2:=4; 
+
+(*
+      2.6. Задание адресов I[adr1,adr2] для DI-сигналов подсистемы "ПТН" (Подогрев ТеплоНосителя).
+*)
+
+ // адреса сигнала "ПТН : подогреватель в работе" (Heater On) :
+ PtnPar_HeaterOn.adr1:=8; 
+ PtnPar_HeaterOn.adr2:=0; 
+ 
+ // адреса сигнала "ПТН : авария подогревателя" (Heater Break) :
+ PtnPar_HeaterBreak.adr1:=8; 
+ PtnPar_HeaterBreak.adr2:=1; 
+
+ // адреса сигнала "ПТН : P теплоносителя низкое" :
+ PtnPar_P_malo.adr1:=8; 
+ PtnPar_P_malo.adr2:=2; 
+ 
+(*
+      2.7. Задание адресов I[adr1,adr2] для DI-сигналов подсистемы "Воздухосборник"
+*)
+
+// адреса сигнала "P до Е1 мало" :
+ VsbPar_P_DoE1Malo.adr1:=8; 
+ VsbPar_P_DoE1Malo.adr2:=3; 
+ 
+ // адреса сигнала "P после Е1 мало" :
+ VsbPar_P_PosleE1Malo.adr1:=8; 
+ VsbPar_P_PosleE1Malo.adr2:=4; 
+ 
+(*
+      2.8. Задание адресов I[adr1,adr2] для DI-сигналов подсистемы "Линия Импульсных Трубок"
+*)
+
+// адреса сигнала "Температура обратной воды_Автомат включен" :
+ LitPar_T_ObrVodii_AvtVkl.adr1:=14; 
+ LitPar_T_ObrVodii_AvtVkl.adr2:=2; 
+ 
+ // адреса сигнала "Обогрев ИТ_Включен" :
+ LitPar_ObogrevIT_Vkl.adr1:=14; 
+ LitPar_ObogrevIT_Vkl.adr2:=0; 
+ 
+ // адреса сигнала "Обогрев ИТ_Выключен" :
+ LitPar_ObogrevIT_Viikl.adr1:=14; 
+ LitPar_ObogrevIT_Viikl.adr2:=1; 
+ 
+ // адреса сигнала "Обогрев ИТ_Авария" :
+ LitPar_ObogrevIT_Avariia.adr1:=14; 
+ LitPar_ObogrevIT_Avariia.adr2:=3; 
+ 
+(*
+      2.9. Задание адресов Q[adr1,adr2] для DO-сигналов подсистемы "Загазованность"
+*)
+
+// адреса сигнала "Световая синализация : Сепараторы_Порог1" :
+ ZagazUpr_SepSignal_Svet1.adr1:=4; 
+ ZagazUpr_SepSignal_Svet1.adr2:=1; 
+ 
+ // адреса сигнала "Световая синализация : Сепараторы_Порог2" :
+ ZagazUpr_SepSignal_Svet2.adr1:=4; 
+ ZagazUpr_SepSignal_Svet2.adr2:=2; 
+ 
+ // адреса сигнала "Звуковая синализация : Сепараторы_Порог1" :
+ ZagazUpr_SepSignal_Zvuk1.adr1:=4; 
+ ZagazUpr_SepSignal_Zvuk1.adr2:=3; 
+ 
+ // адреса сигнала "Световая синализация : Операторная" :
+ ZagazUpr_OperSignal_Svet.adr1:=4; 
+ ZagazUpr_OperSignal_Svet.adr2:=4; 
+ 
+ // адреса сигнала "Звуковая синализация : Операторная" :
+ ZagazUpr_OperSignal_Zvuk.adr1:=4; 
+ ZagazUpr_OperSignal_Zvuk.adr2:=5; 
+ 
+ // адреса сигнала "Световая синализация : УОУ" :
+ ZagazUpr_UouSignal_Svet.adr1:=4; 
+ ZagazUpr_UouSignal_Svet.adr2:=0; 
+
+End_Data_Block
+
+//======================================= >3 ===================================
+
+(*
+      3.  DbKranPpuAdr - блок данных для хранения адресов входных и выходных сигналов для кранов ЭППУ,
+   проходящих через модули Siemens.
+     Особенности организации : для работы с кранами ЭППУ используется 2 DataBlock'а : DbKranPpuAdr (адреса)
+   и DbKranPpu (параметры) с одинаковым (паралельным) принципом организации 1-й размерности (X) 2-мерного
+   размера массива элементов [X,Y] по схеме :
+    1) 2-я размерность Y (колонки с 1-й по 6-ю) - фиксированный порядок сигналов у каждого крана ЭППУ :
+              [x,1] - сигнал № 1 - "закрыт" (KrClose)
+              [x,2] - сигнал № 2 - "открыт" (KrOpen)
+              [x,3] - сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+              [x,4] - сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+              [x,5] - сигнал № 5 - "закрыть" (KrToClose)
+              [x,6] - сигнал № 6 - "открыть" (KrToOpen)
+    2) 1-я размерность X (строки с 1-й по 15-ю) - принадлежность его к одной из подсистем
+    ("СИ1" - 4 крана (1-4), "СИ1" - 4 крана (5-8), "СП1" - 4 крана (9-12), "Общая 
+    обвязка" - 3 крана (13-15) и тип крана по исполняемой функции :
+               +------------------+----+----+----++-----------------------------+           
+               |только СИ1,СИ2,СП1| СИ1| СИ2| СП1||     "Общая обвязка"         |
+               +------------------+----+----+----++-----------------------------+           
+               | кран на входе  ->| 01 | 05 | 09 || 13 <- вход топливного газа  |
+               | кран на выходе ->| 02 | 06 | 10 || 14 <- выход импульсного газа|
+               | кран на УФР    ->| 03 | 07 | 11 || 15 <- на УФР общий          |
+               | кран на факел  ->| 04 | 08 | 12 ||                             |
+               +------------------+----+----+----++-----------------------------+           
+                                 "Номера элементов Х" 
+
+      Т.о. доступ к одному и тому же типу кранов (напр. "на входе") разных сепараторов осуществляется
+   с одинаковым фиксированным приращением (dz=4) по X.
+      Эти правила по структуре 2-мерного массива кранов KranPpuAdrParam[X,Y] фиксируются при 
+   объявлении и потом используются при инициализации, обработке данных, анализе и связи со Scada.
+*)
+ 
+Data_Block DbKranPpuAdr   
+
+Title = 'Значения параметров'
+Author: Konst
+Name: DbKranP1
+Family: Main
+Struct
+ KranPpuEmul : bool; // эмуляция сигналов I,Q : 0 - выключена (реальные сигналы!) \ 1 - эмуляция
+ SignalCopyToEmul : bool; // метка: 1- значения сигналов I[],Q[] копируются в виртуальные \ 0-нет
+ 
+ KranPpuAdrParam : Array [1..15,1..6] Of TSignalBool; //TAdrIOSignal;
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+ KranPpuEmul:=false; // эмуляция выключена - используются реальнные сигналы
+ SignalCopyToEmul:=false;
+
+(*
+   3.1. KranPpu[1] : Задание адресов [adr1,adr2] для сигналов : "Кран № 1 : СИ1, на входе" 
+*)
+
+ // KranPpu[1], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[1,1].adr1:=4;
+ KranPpuAdrParam[1,1].adr2:=0;
+ // KranPpu[1], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[1,2].adr1:=4;
+ KranPpuAdrParam[1,2].adr2:=1;
+ // KranPpu[1], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[1,3].adr1:=5;
+ KranPpuAdrParam[1,3].adr2:=1; //0; //26.09.13 - Рома_Сигналы
+ // KranPpu[1], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[1,4].adr1:=5;
+ KranPpuAdrParam[1,4].adr2:=2; //1; //26.09.13 - Рома_Сигналы
+ // KranPpu[1], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[1,5].adr1:=2;
+ KranPpuAdrParam[1,5].adr2:=0;
+ // KranPpu[1], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[1,6].adr1:=2;
+ KranPpuAdrParam[1,6].adr2:=1;
+
+(*
+   3.2. KranPpu[2] : Задание адресов [adr1,adr2] для сигналов : "Кран № 2 : СИ1, на выходе"
+*)
+
+ // KranPpu[2], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[2,1].adr1:=4;
+ KranPpuAdrParam[2,1].adr2:=2;
+ // KranPpu[2], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[2,2].adr1:=4;
+ KranPpuAdrParam[2,2].adr2:=3;
+ // KranPpu[2], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[2,3].adr1:=5;
+ KranPpuAdrParam[2,3].adr2:=3; //2; //26.09.13 - Рома_Сигналы
+ // KranPpu[2], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[2,4].adr1:=5;
+ KranPpuAdrParam[2,4].adr2:=4; //3; //26.09.13 - Рома_Сигналы
+ // KranPpu[2], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[2,5].adr1:=2;
+ KranPpuAdrParam[2,5].adr2:=2;
+ // KranPpu[2], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[2,6].adr1:=2;
+ KranPpuAdrParam[2,6].adr2:=3;
+
+(*
+   3.3. KranPpu[3] : Задание адресов [adr1,adr2] для сигналов : "Кран № 3 : СИ1, на УФР"
+*)
+
+ // KranPpu[3], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[3,1].adr1:=4;
+ KranPpuAdrParam[3,1].adr2:=6;
+ // KranPpu[3], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[3,2].adr1:=4;
+ KranPpuAdrParam[3,2].adr2:=7;
+ // KranPpu[3], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[3,3].adr1:=5;
+ KranPpuAdrParam[3,3].adr2:=7; //6; //26.09.13 - Рома_Сигналы
+ // KranPpu[3], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[3,4].adr1:=5;
+ KranPpuAdrParam[3,4].adr2:=0; //7; //26.09.13 - Рома_Сигналы
+ // KranPpu[3], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[3,5].adr1:=2;
+ KranPpuAdrParam[3,5].adr2:=6;
+ // KranPpu[3], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[3,6].adr1:=2;
+ KranPpuAdrParam[3,6].adr2:=7;
+
+(*
+   3.4. KranPpu[4] : Задание адресов [adr1,adr2] для сигналов : "Кран № 4 : СИ1, на факел"
+*)
+
+ // KranPpu[4], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[4,1].adr1:=4;
+ KranPpuAdrParam[4,1].adr2:=4;
+ // KranPpu[4], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[4,2].adr1:=4;
+ KranPpuAdrParam[4,2].adr2:=5;
+ // KranPpu[4], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[4,3].adr1:=5;
+ KranPpuAdrParam[4,3].adr2:=5; //4; //26.09.13 - Рома_Сигналы
+ // KranPpu[4], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[4,4].adr1:=5;
+ KranPpuAdrParam[4,4].adr2:=6; //5; //26.09.13 - Рома_Сигналы
+ // KranPpu[4], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[4,5].adr1:=2;
+ KranPpuAdrParam[4,5].adr2:=4;
+ // KranPpu[4], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[4,6].adr1:=2;
+ KranPpuAdrParam[4,6].adr2:=5;
+
+(*
+   3.5. KranPpu[5] : Задание адресов [adr1,adr2] для сигналов : "Кран № 5 : СИ2, на входе" 
+*)
+
+ // KranPpu[5], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[5,1].adr1:=6;
+ KranPpuAdrParam[5,1].adr2:=4; //*0;
+ // KranPpu[5], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[5,2].adr1:=6;
+ KranPpuAdrParam[5,2].adr2:=5; //*1;
+ // KranPpu[5], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[5,3].adr1:=7;
+ KranPpuAdrParam[5,3].adr2:=3; //*7; //0; //26.09.13 - Рома_Сигналы
+ // KranPpu[5], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[5,4].adr1:=7;
+ KranPpuAdrParam[5,4].adr2:=4; //*0; //1; //26.09.13 - Рома_Сигналы
+ // KranPpu[5], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[5,5].adr1:=3;
+ KranPpuAdrParam[5,5].adr2:=4;
+ // KranPpu[5], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[5,6].adr1:=3;
+ KranPpuAdrParam[5,6].adr2:=5;
+
+(*
+   3.6. KranPpu[6] : Задание адресов [adr1,adr2] для сигналов : "Кран № 6 : СИ2, на выходе"
+*)
+
+ // KranPpu[6], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[6,1].adr1:=6;
+ KranPpuAdrParam[6,1].adr2:=2;
+ // KranPpu[6], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[6,2].adr1:=6;
+ KranPpuAdrParam[6,2].adr2:=3;
+ // KranPpu[6], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[6,3].adr1:=7;
+ KranPpuAdrParam[6,3].adr2:=1; //2; //26.09.13 - Рома_Сигналы
+ // KranPpu[6], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[6,4].adr1:=7;
+ KranPpuAdrParam[6,4].adr2:=2; //3; //26.09.13 - Рома_Сигналы
+ // KranPpu[6], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[6,5].adr1:=3;
+ KranPpuAdrParam[6,5].adr2:=2;
+ // KranPpu[6], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[6,6].adr1:=3;
+ KranPpuAdrParam[6,6].adr2:=3;
+
+(*
+   3.7. KranPpu[7] : Задание адресов [adr1,adr2] для сигналов : "Кран № 7 : СИ2, на УФР"
+*)
+
+ // KranPpu[7], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[7,1].adr1:=6;
+ KranPpuAdrParam[7,1].adr2:=6;
+ // KranPpu[7], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[7,2].adr1:=6;
+ KranPpuAdrParam[7,2].adr2:=7;
+ // KranPpu[7], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[7,3].adr1:=7;
+ KranPpuAdrParam[7,3].adr2:=5; //6; //26.09.13 - Рома_Сигналы
+ // KranPpu[7], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[7,4].adr1:=7;
+ KranPpuAdrParam[7,4].adr2:=6; //7; //26.09.13 - Рома_Сигналы
+ // KranPpu[7], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[7,5].adr1:=3;
+ KranPpuAdrParam[7,5].adr2:=6; //*0;
+ // KranPpu[7], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[7,6].adr1:=3;
+ KranPpuAdrParam[7,6].adr2:=7; //*1;
+
+(*
+   3.8. KranPpu[8] : Задание адресов [adr1,adr2] для сигналов : "Кран № 8 : СИ2, на факел"
+*)
+ 
+ // KranPpu[8], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[8,1].adr1:=6;
+ KranPpuAdrParam[8,1].adr2:=0; //*4;
+ // KranPpu[8], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[8,2].adr1:=6;
+ KranPpuAdrParam[8,2].adr2:=1; //*5;
+ // KranPpu[8], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[8,3].adr1:=7;
+ KranPpuAdrParam[8,3].adr2:=7; //*3; //4; //26.09.13 - Рома_Сигналы
+ // KranPpu[8], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[8,4].adr1:=7;
+ KranPpuAdrParam[8,4].adr2:=0; //*4; //5; //26.09.13 - Рома_Сигналы
+ // KranPpu[8], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[8,5].adr1:=3;
+ KranPpuAdrParam[8,5].adr2:=0; //*6;
+ // KranPpu[8], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[8,6].adr1:=3;
+ KranPpuAdrParam[8,6].adr2:=1; //*7;
+
+(*
+   3.9. KranPpu[9] : Задание адресов [adr1,adr2] для сигналов : "Кран № 9 : СП1, на входе" 
+*)
+
+ // KranPpu[9], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[9,1].adr1:=0;
+ KranPpuAdrParam[9,1].adr2:=0;
+ // KranPpu[9], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[9,2].adr1:=0;
+ KranPpuAdrParam[9,2].adr2:=1;
+ // KranPpu[9], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[9,3].adr1:=1;
+ KranPpuAdrParam[9,3].adr2:=7; //6; //26.09.13 - Рома_Сигналы
+ // KranPpu[9], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[9,4].adr1:=1;
+ KranPpuAdrParam[9,4].adr2:=0; //7; //26.09.13 - Рома_Сигналы
+ // KranPpu[9], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[9,5].adr1:=0;
+ KranPpuAdrParam[9,5].adr2:=0;
+ // KranPpu[9], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[9,6].adr1:=0;
+ KranPpuAdrParam[9,6].adr2:=1;
+
+(*
+   3.10. KranPpu[10] : Задание адресов [adr1,adr2] для сигналов : "Кран № 10 : СП1, на выходе"
+*)
+
+ // KranPpu[10], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[10,1].adr1:=0;
+ KranPpuAdrParam[10,1].adr2:=2;
+ // KranPpu[10], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[10,2].adr1:=0;
+ KranPpuAdrParam[10,2].adr2:=3;
+ // KranPpu[10], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[10,3].adr1:=2;
+ KranPpuAdrParam[10,3].adr2:=0;
+ // KranPpu[10], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[10,4].adr1:=2;
+ KranPpuAdrParam[10,4].adr2:=1;
+ // KranPpu[10], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[10,5].adr1:=0;
+ KranPpuAdrParam[10,5].adr2:=2;
+ // KranPpu[10], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[10,6].adr1:=0;
+ KranPpuAdrParam[10,6].adr2:=3;
+
+(*
+   3.11. KranPpu[11] : Задание адресов [adr1,adr2] для сигналов : "Кран № 11 : СП1, на УФР"
+*)
+
+ // KranPpu[11], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[11,1].adr1:=0;
+ KranPpuAdrParam[11,1].adr2:=6;
+ // KranPpu[11], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[11,2].adr1:=0;
+ KranPpuAdrParam[11,2].adr2:=7;
+ // KranPpu[11], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[11,3].adr1:=2;
+ KranPpuAdrParam[11,3].adr2:=4;
+ // KranPpu[11], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[11,4].adr1:=2;
+ KranPpuAdrParam[11,4].adr2:=5;
+ // KranPpu[11], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[11,5].adr1:=0;
+ KranPpuAdrParam[11,5].adr2:=6;
+ // KranPpu[11], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[11,6].adr1:=0;
+ KranPpuAdrParam[11,6].adr2:=7;
+
+(*
+   3.12. KranPpu[12] : Задание адресов [adr1,adr2] для сигналов : "Кран № 12 : СП1, на факел"
+*)
+
+ // KranPpu[12], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[12,1].adr1:=0;
+ KranPpuAdrParam[12,1].adr2:=4;
+ // KranPpu[12], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[12,2].adr1:=0;
+ KranPpuAdrParam[12,2].adr2:=5;
+ // KranPpu[12], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[12,3].adr1:=2;
+ KranPpuAdrParam[12,3].adr2:=2;
+ // KranPpu[12], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[12,4].adr1:=2;
+ KranPpuAdrParam[12,4].adr2:=3;
+ // KranPpu[12], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[12,5].adr1:=0;
+ KranPpuAdrParam[12,5].adr2:=4;
+ // KranPpu[12], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[12,6].adr1:=0;
+ KranPpuAdrParam[12,6].adr2:=5;
+
+(*
+   3.13. KranPpu[13] : Задание адресов [adr1,adr2] для сигналов : "Кран № 13 : Общая обвязка, на входе топл. газа" 
+*)
+ 
+ // KranPpu[13], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[13,1].adr1:=1;
+ KranPpuAdrParam[13,1].adr2:=3; //2; //26.09.13 - Рома_Сигналы
+ // KranPpu[13], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[13,2].adr1:=1;
+ KranPpuAdrParam[13,2].adr2:=4; //3; //26.09.13 - Рома_Сигналы
+ // KranPpu[13], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[13,3].adr1:=3;
+ KranPpuAdrParam[13,3].adr2:=0;
+ // KranPpu[13], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[13,4].adr1:=3;
+ KranPpuAdrParam[13,4].adr2:=1;
+ // KranPpu[13], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[13,5].adr1:=1;
+ KranPpuAdrParam[13,5].adr2:=2;
+ // KranPpu[13], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[13,6].adr1:=1;
+ KranPpuAdrParam[13,6].adr2:=3;
+
+(*
+   3.14. KranPpu[14] : Задание адресов [adr1,adr2] для сигналов : "Кран № 14 : Общая обвязка, на выходе имп. газа" 
+*)
+
+ // KranPpu[14], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[14,1].adr1:=1;
+ KranPpuAdrParam[14,1].adr2:=1; //0; //26.09.13 - Рома_Сигналы
+ // KranPpu[14], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[14,2].adr1:=1;
+ KranPpuAdrParam[14,2].adr2:=2; //1; //26.09.13 - Рома_Сигналы
+ // KranPpu[14], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[14,3].adr1:=2;
+ KranPpuAdrParam[14,3].adr2:=6;
+ // KranPpu[14], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[14,4].adr1:=2;
+ KranPpuAdrParam[14,4].adr2:=7;
+ // KranPpu[14], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[14,5].adr1:=1;
+ KranPpuAdrParam[14,5].adr2:=0;
+ // KranPpu[14], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[14,6].adr1:=1;
+ KranPpuAdrParam[14,6].adr2:=1;
+
+(*
+   3.15. KranPpu[15] : Задание адресов [adr1,adr2] для сигналов : "Кран № 15 : Общая обвязка, на УФР общий"
+*)
+
+ // KranPpu[15], сигнал № 1 - "закрыт" (KrClose)
+ KranPpuAdrParam[15,1].adr1:=1;
+ KranPpuAdrParam[15,1].adr2:=5; //4; //26.09.13 - Рома_Сигналы
+ // KranPpu[15], сигнал № 2 - "открыт" (KrOpen) 
+ KranPpuAdrParam[15,2].adr1:=1;
+ KranPpuAdrParam[15,2].adr2:=6; //5; //26.09.13 - Рома_Сигналы
+ // KranPpu[15], сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+ KranPpuAdrParam[15,3].adr1:=3;
+ KranPpuAdrParam[15,3].adr2:=2;
+ // KranPpu[15], сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+ KranPpuAdrParam[15,4].adr1:=3;
+ KranPpuAdrParam[15,4].adr2:=3;
+ // KranPpu[15], сигнал № 5 - "закрыть" (KrToClose)
+ KranPpuAdrParam[15,5].adr1:=1;
+ KranPpuAdrParam[15,5].adr2:=4;
+ // KranPpu[15], сигнал № 6 - "открыть" (KrToOpen)
+ KranPpuAdrParam[15,6].adr1:=1;
+ KranPpuAdrParam[15,6].adr2:=5;
+
+End_Data_Block
+

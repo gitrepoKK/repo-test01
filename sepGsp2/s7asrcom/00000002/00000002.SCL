@@ -1,0 +1,50 @@
+organization_block obMain
+
+Title= 'Основной управляющий блок'
+Version: '1.0'
+Author: Konst
+Name: Main1
+Family: Main
+
+var_temp
+ Info : array [0..19] of byte;
+ // Temporary Variables
+ i1 : int;    
+end_var
+
+//=======================  Instructions  ===============================>
+
+(*
+      1. Ob1 : Основная ("сепараторная") часть.
+      Note! Кроме основного блока ObMain (Ob1) в sepGsp2 используются obRestart (Ob100) и 
+   obCyclicCalcFlow (Ob32).
+*)
+
+ fb_ParScan.idb_fb_ParScan(); //циклический опрос IO-сигналов модулей Siemens.
+ fb_KranPpu.idb_fb_KranPpu(); //работа с кранами ЭППУ
+ fb_SipValve.idb_fb_SipValve(); //работа с клапанами Sipart
+ fb_Watch.idb_fb_Watch(); //циклическое наблюдение за состоянием, командами, ошибками
+ fb_Flow.idb_fb_Flow(); //циклическое выполнение операций по расходам
+
+(*
+      2. Ob1 : Дополнительная часть - работа с БУ из УОУ.
+      Note! Скопировано из ob_Main.scl (Cher, проект Ps402)
+*)
+
+if DbInfo.ExchangeBU // Выполнять часть по опросу БУ
+then
+    
+//Основной блок работы программы 
+                            //если изменилась конфигурация
+ 
+IF db_Cmmn.BU_recnfg THEN 
+    fb_DataFill.idb_fb_DataFill();
+    db_Cmmn.BU_recnfg := 0;
+END_IF;
+                             //Опрос блоков и.т.д
+fb_QueueEx.  idb_fb_QueueEx();
+fb_Test.     idb_fb_Test();
+
+end_if; // if DbInfo.ExchangeBU
+
+end_organization_block

@@ -1,0 +1,396 @@
+(*
+      Объявления Udt & Db для работы с кранами ЭППУ :
+
+         Udt TKranPpu
+         DbKranPpu
+
+      Note! Для работы с кранами ЭПУУ ещё есть DbKranPpuAdr - блок данных для 
+   хранения адресов входных и выходных сигналов для кранов ЭППУ, проходящих 
+   через модули Siemens. 
+      DbKranPpuAdr объявлен в db_mainSet1.scl, чтобы назначаемые там адреса не
+   подвергать излишним случайным изменениям при корректировке остальных пара-
+   метров для работы с кранами.
+*)
+
+//======================================= >1 ===================================
+
+(*
+      1. Udt TKranPpu - тип данных для хранения информации о кранах ЭППУ
+*)
+
+type TKranPpu:  
+ struct   
+  KrClose : bool; //значение DI-сигнала крана ЭППУ "закрыт" (концевик закрытия)
+  KrOpen : bool; //значение DI-сигнала крана ЭППУ "открыт" (концевик открытия)
+  CC_Close : bool; //значение DI-сигнала крана ЭППУ "Целостность Цепи закрытия" :1 - естьЦЦ\0-нет
+  CC_Open : bool; //значение DI-сигнала крана ЭППУ "Целостность Цепи открытия" :1 - естьЦЦ\0-нет
+  KrToCloseR : bool; //значение DO-сигнала крана ЭППУ "закрыть" (чтение состояния)
+  KrToCloseW : bool; //значение DO-сигнала "закрыть" (вычисляется за цикл и назначается в Q[x,5])
+  KrToOpenR : bool; //значение DO-сигнала крана ЭППУ "открыть" (чтение состояния)
+  KrToOpenW : bool; //значение DO-сигнала "открыть" (вычисляется за цикл и назначается в Q[x,5])
+  
+  KrToCloseW_HandPush : bool; //значение DO-сигнала "закрыть" (назначается в Q[x,5] при HandPush=true)
+  KrToOpenW_HandPush : bool; //значение DO-сигнала "открыть" (назначается в Q[x,6] при HandPush=true)
+  KrClose_NotSancMove : bool; //метка : 1- начало несанкцинир. закрытия крана с площадки \ 0- нет)
+  KrOpen_NotSancMove : bool; //метка : 1- начало несанкцинир. открытия крана с площадки \ 0- нет)
+ 
+  KrClose_PrevVal : bool; //предыдущее значение DI-сигнала крана ЭППУ "закрыт" (концевик закрытия)
+  KrClose_Ev01 : bool; //флаг события "концевик закрытия замкнулся" (0->1) : 1- да \ 0- нет)
+  KrClose_Ev10 : bool; //флаг события "концевик закрытия разомкнулся" (1->0) : 1- да \ 0- нет)
+  KrOpen_PrevVal : bool; //предыдущее значение DI-сигнала крана ЭППУ "открыт" (концевик открытия)
+  KrOpen_Ev01 : bool; //флаг события "концевик открытия замкнулся" (0->1) : 1- да \ 0- нет)
+  KrOpen_Ev10 : bool; //флаг события "концевик открытия разомкнулся" (1->0) : 1- да \ 0- нет)
+  
+  TmOperKr_NO : Int; //номер таймера (используютя глобально) - инициализируется
+  TmOperKr_TV : s5time; //величина таймера (длительность) - назначается взавис. от шага операции
+  TmOperKr_Q : bool;  //состояние таймера (для таймера типа s_odts : 1 - время отсчитано)
+ 
+  TmStrag_Value : s5time; //время на страгивани крана
+  TmFullClose_Value : s5time; //время на полное закрытие крана
+  TmFullOpen_Value : s5time; //время на полное открытие крана
+  TmDogim_Value : s5time; //время на дожим крана  //s5t#20ms
+
+  HmiTmStrag_Value : dint; //время на страгивани крана - для ВУ тип dInt
+  HmiTmFullClose_Value : dint; //время на полное закрытие крана - для ВУ тип dInt
+  HmiTmFullOpen_Value : dint; //время на полное открытие крана - для ВУ тип dInt
+  HmiTmDogim_Value : dint; //время на дожим крана  //s5t#20ms - для ВУ тип dInt
+
+  State : int; //сост-е крана:0-неопред.\1-закрыт\2-открыт\3-закрывается\4-открывается\5-неиспр
+  StateByClOp : int; //сост. крана по концевикам : 1-закрыт\2-открыт\3-ClOp00 (разомкнуты)\4-ClOp11
+
+  CmdKrPpu : int; //команда для крана : 0-нет\1-закрыть (с ВУ) \ 2-открыть (с ВУ)\..
+  CmdKrPpuModeExec : int; //режим исп.команды: 0-норм.\1-прин.прерыв.\2-прин.исп\3-экстренное исп.
+  CmdKrPpu_Next : int; //следующая команда для крана : 0-нет\1-закрыть (с ВУ) \ 2-открыть (с ВУ)\..
+  CmdKrPpuModeExec_Next : int; //режим исп.след.команды: 0-норм.\1-прин.прерыв.\2-прин.исп\3-экстренное исп.
+  CmdKrPpuLegal : bool; //непротиворечивость команды : 0-нельзя исполнять\1-можно исполнять
+  CmdKrPpuHandPush : bool; //ручное директивное управленне : 0-выключено\1-включено
+ 
+  Oper : int; //вып-яемая операция с краном : 0 - нет операций (стоит)\1-закрыть\2-открыть
+  OperStep : int; //шаг вып-яемой операции:0-нет\ 1Х-закрытие(11страг\12fullOpen\13дожим)\ 2Х-откр.
+  
+  OperErrorLbl : bool; //наличие ошибки при выполнении операции с краном : 0 - нет \ 1 - есть
+  OperErrorNum : int; //номер ошибки при выполнении операции с краном : 0 - нет ошибок \ 1 ..
+
+  HmiErrCC_Close : bool; //метка : 1- нарушена ц.ц. на закрытие \ 0- нет
+  HmiErrCC_Open : bool; //метка : 1- нарушена ц.ц. на открытие \ 0- нет 
+  HmiErrClOp00 : bool; //метка : 1- оба концевика в 0 (разомкнуты) \ 0- нет (ClOp - Close-Open) 
+  HmiErrClOp11 : bool; //метка : 1- оба концевика в 1 (замкнуты) \ 0- нет 
+  HmiErrMessConfirm : bool; //метка : 1- не квитированы сообщения \ 0- нет 
+
+  HmiSyncTimers : int; //синхр-ция знач. таймеров ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+  KrDefectFatal : bool; //фатальная неисправность крана - управление невозможно
+  KrDefectNote : bool; //предупр. неисправность крана, при которой управление возможно
+  HmiKrEnableToClose : bool; //доступность крана для закрытия с ВУ : 0-не доступен \ 1 - доступен
+  HmiKrEnableToOpen : bool; //доступность крана для открытия с ВУ : 0-не доступен \ 1 - доступен
+  HmiKrToClose : bool; //факт подачи команды на закрытие крана с ВУ : 0- не подана \ 1 - подана
+  HmiKrToOpen : bool; //факт подачи команды на открытие крана с ВУ : 0- не подана \ 1 - подана
+
+  isBan_AutoControl : bool; //флаг запрета автоматического управления краном: 0-нет запрета\ 1- запрещено
+  isBan_HandControl : bool; //флаг запрета ручного управления краном: 0-нет запрета\ 1- запрещено
+ 
+  reasonBan_AutoControl : int; //причина запрета автоматического управления краном (RBC_ из DbEnum)
+  reasonBan_HandControl : int; //причина запрета ручного управления краном (RBC_ из DbEnum)
+  
+ end_struct
+end_type
+
+//======================================= >2 ===================================
+
+(*
+      2.  DbKranPpu - блок данных для хранения значений всех параметров кранов ЭППУ.
+     Особенности организации : для работы с кранами ЭППУ используется 2 DataBlock'а : DbKranPpuAdr (адреса)
+   и DbKranPpu (параметры)с одинаковым (паралельным) принципом организации 2-мерного размера массива 
+   элементов [X,Y] по схеме, описанной в Comment для DbKranPpuAdr (только для DbKranPpu
+*)
+
+(*
+    1) 2-я размерность Y (колонки с 1-й по 6-ю) - фиксированный порядок сигналов у каждого крана ЭППУ :
+              [x,1] - сигнал № 1 - "закрыт" (KrClose)
+              [x,2] - сигнал № 2 - "открыт" (KrOpen)
+              [x,3] - сигнал № 3 - "обрыв цепи закрытия" (KrBreakLineClose)
+              [x,4] - сигнал № 4 - "обрыв цепи открытия" (KrBreakLineOpen)
+              [x,5] - сигнал № 5 - "закрыть" (KrToClose)
+              [x,6] - сигнал № 6 - "открыть" (KrToOpen)
+    2) 1-я размерность X (строки с 1-й по 15-ю) - принадлежность его к одной из подсистем
+    ("СИ1" - 4 крана (1-4), "СИ1" - 4 крана (5-8), "СП1" - 4 крана (9-12), "Общая 
+    обвязка" - 3 крана (13-15) и тип крана по исполняемой функции :
+               +------------------+----+----+----++-----------------------------+           
+               |только СИ1,СИ2,СП1| СИ1| СИ2| СП1||     "Общая обвязка"         |
+               +------------------+----+----+----++-----------------------------+           
+               | кран на входе  ->| 01 | 05 | 09 || 13 <- вход топливного газа  |
+               | кран на выходе ->| 02 | 06 | 10 || 14 <- выход импульсного газа|
+               | кран на УФР    ->| 03 | 07 | 11 || 15 <- на УФР общий          |
+               | кран на факел  ->| 04 | 08 | 12 ||                             |
+               +------------------+----+----+----++-----------------------------+           
+                                 "Номера элементов Х" 
+
+      Т.о. доступ к одному и тому же типу кранов (напр. "на входе") разных сепараторов осуществляется
+   с одинаковым фиксированным приращением (dz=4) по X.
+      Эти правила по структуре 2-мерного массива кранов KranPpuAdrParam[X,Y] фиксируются при 
+   объявлении и потом используются при инициализации, обработке данных, анализе и связи со Scada.
+*)
+
+Data_Block DbKranPpu
+
+Title = 'Значения параметров'
+Author: Konst
+Name: DbKranP2
+Family: Main
+Struct
+ numKrPpu : int;  // количество кранов ЭППУ
+ SignalCloseOff : bool; //метка: 1- выключить Выходные сигналы для всех кранов\ 0-нет
+ SignalOpenOff : bool; //метка: 1- выключить Входные сигналы для всех кранов\ 0-нет
+ HandPushOff : bool; //метка: 1 - выкл. "HandPush" со снятием упр. сигналов для всех кранов\ 0-нет
+
+ KranPpuParam : Array [1..15] Of TKranPpu; // м. еще размерность или KranPpuParam_Prev
+End_Struct //Db
+
+Begin // Раздел назначения начальных данных
+
+ numKrPpu:=15; // общее количество кранов ЭППУ
+ SignalCloseOff:=false;
+ SignalOpenOff:=false;
+ HandPushOff:=false;
+
+(*
+      2.1. Задание номеров таймеров для кранов ЭППУ.
+   Notes! n1) Д.б. разные значения и не совпадать с другими таймерами проекта
+    n2) Значения м.б. любыми в диапазоне [1,256] 
+*)
+
+ KranPpuParam[1].TmOperKr_NO:=101; 
+ KranPpuParam[2].TmOperKr_NO:=102;
+ KranPpuParam[3].TmOperKr_NO:=103;
+ KranPpuParam[4].TmOperKr_NO:=104;
+ KranPpuParam[5].TmOperKr_NO:=105;
+ KranPpuParam[6].TmOperKr_NO:=106;
+ KranPpuParam[7].TmOperKr_NO:=107;
+ KranPpuParam[8].TmOperKr_NO:=108;
+ KranPpuParam[9].TmOperKr_NO:=109;
+ KranPpuParam[10].TmOperKr_NO:=110;
+ KranPpuParam[11].TmOperKr_NO:=111;
+ KranPpuParam[12].TmOperKr_NO:=112;
+ KranPpuParam[13].TmOperKr_NO:=113;
+ KranPpuParam[14].TmOperKr_NO:=114;
+ KranPpuParam[15].TmOperKr_NO:=115;
+ 
+(*
+      2.2. Задание значений таймеров на операции с кранами ЭППУ.
+   Notes! n1) В v1 таймера на операции были разными для операций, но одинаковыми для 
+ всех кранов. В v2 добавлена возможность назначать индивидуальные группы со 
+ значениями таймеров на операции.
+   n2) Внимание : При такой реализации инициализации таймеров, значения таймеров, отредактированные 
+ пользователем с ВУ, потеряются после перезаливки программы в ПЛК (при перезаливке DbKranPpu)
+*)
+
+(*
+     2.2.1. KranPpuParam[1] : "Кран № 1 : СИ1, на входе" 
+*)
+
+ KranPpuParam[1].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[1].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[1].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[1].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[1].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[1].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[1].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.2. KranPpuParam[2] : "Кран № 2 : СИ1, на выходе" 
+*)
+
+ KranPpuParam[2].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[2].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[2].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[2].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[2].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[2].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[2].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.3. KranPpuParam[3] : "Кран № 3 : СИ1, на УФР" 
+*)
+
+ KranPpuParam[3].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[3].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[3].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[3].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[3].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[3].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[3].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.4. KranPpuParam[4] : "Кран № 4 : СИ1, на факел" 
+*)
+
+ KranPpuParam[4].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[4].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[4].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[4].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[4].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[4].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[4].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.5. KranPpuParam[5] : "Кран № 5 : СИ2, на входе" 
+*)
+
+ KranPpuParam[5].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[5].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[5].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[5].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[5].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[5].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[5].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.6. KranPpuParam[6] : "Кран № 6 : СИ2, на выходе" 
+*)
+
+ KranPpuParam[6].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[6].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[6].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[6].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[6].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[6].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[6].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.7. KranPpuParam[7] : "Кран № 7 : СИ2, на УФР" 
+*)
+
+ KranPpuParam[7].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[7].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[7].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[7].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[7].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[7].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[7].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.8. KranPpuParam[8] : "Кран № 8 : СИ2, на факел" 
+*)
+
+ KranPpuParam[8].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[8].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[8].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[8].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[8].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[8].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[8].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.9. KranPpuParam[9] : "Кран № 9 : СП1, на входе" 
+*)
+
+ KranPpuParam[9].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[9].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[9].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[9].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[9].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[9].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[9].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.10. KranPpuParam[10] : "Кран № 10 : СП1, на выходе" 
+*)
+
+ KranPpuParam[10].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[10].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[10].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[10].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[10].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[10].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[10].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.11. KranPpuParam[11] : "Кран № 11 : СП1, на УФР" 
+*)
+
+ KranPpuParam[11].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[11].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[11].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[11].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[11].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[11].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[11].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.12. KranPpuParam[12] : "Кран № 12 : СП1, на факел" 
+*)
+
+ KranPpuParam[12].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[12].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[12].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[12].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[12].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[12].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[12].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.13. KranPpuParam[13] : "Кран № 13 : Общая обвязка, на входе топл. газа" 
+*)
+
+ KranPpuParam[13].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[13].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[13].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[13].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[13].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[13].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[13].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.14. KranPpuParam[14] : "Кран № 14 : Общая обвязка, на выходе имп. газа" 
+*)
+
+ KranPpuParam[14].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[14].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[14].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[14].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[14].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[14].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[14].isBan_HandControl:=false; // нет запрета на Ручное управление
+
+(*
+     2.2.15. KranPpuParam[15] : "Кран № 15 : Общая обвязка, на УФР общий" 
+*)
+
+ KranPpuParam[15].HmiSyncTimers:=1; //синхр-ция знач. уставок ПЛК и ВУ:0-не проводить\1-синхрПЛК=>ВУ\2-синхрВУ=>ПЛК
+ 
+ KranPpuParam[15].TmStrag_Value:=s5t#5s; // время на страгивани крана
+ KranPpuParam[15].TmFullClose_Value:=s5t#20s; // время на полное закрытие крана
+ KranPpuParam[15].TmFullOpen_Value:=s5t#20s; // время на полное открытие крана
+ KranPpuParam[15].TmDogim_Value:=s5t#3s; // время на дожим крана
+
+ KranPpuParam[15].isBan_AutoControl:=false; // нет запрета на Автоматическое управление
+ KranPpuParam[15].isBan_HandControl:=false; // нет запрета на Ручное управление
+  
+End_Data_Block

@@ -1,0 +1,79 @@
+
+FUNCTION_BLOCK fb_StatusRcv
+//Разбор ответов и выставление флагов неисправности при разных режимах работы
+//Cmd = 0 стандартный режим работы
+//Cmd = 1 режим загрузки
+//
+//
+//
+//
+//
+
+VAR_INPUT
+    cnt     :INT;
+    CP      :INT;
+    PORT    :INT;
+    DoneSts :BOOL;
+    snd :udt_Snd;
+END_VAR    
+
+VAR
+    rcv_NULL        :udt_Rcv;
+    cnt_t           :INT;
+    dwnl_sucsess    :ARRAY[0..1, 0..1, 0..2] OF BOOL;
+END_VAR
+
+                                                        //удачная посылка  команды опроса
+IF Snd.cmd = 0 AND DoneSts THEN
+    idb_fb_QueueEx.RcvBuff[CP,PORT].ready := 1;    
+        IF  (cnt MOD 2) = 0 THEN
+            db_BU.CP[CP].port[PORT].BU[cnt / 2].rcv[0] := idb_fb_QueueEx.RcvBuff[CP, PORT];
+            db_BU.CP[CP].port[PORT].BU[cnt / 2].rcv[0].invalid := 0;
+        //DebKK:28.05.14    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[cnt/2].PIPE[0]].Invalid:= 0;
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[cnt/2].PIPE[1]].Invalid:= 0;
+        ELSE 
+            db_BU.CP[CP].port[PORT].BU[(cnt - 1) / 2].rcv[1] := idb_fb_QueueEx.RcvBuff[CP, PORT];
+            db_BU.CP[CP].port[PORT].BU[(cnt - 1) / 2].rcv[1].invalid := 0;
+        //DebKK:28.05.14    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[(cnt-1)/2].PIPE[0]].Invalid:= 0;
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[(cnt-1)/2].PIPE[1]].Invalid:= 0;
+        END_IF;
+      idb_fb_QueueEx.RcvBuff[CP,PORT] := rcv_NULL;  
+END_IF;
+ 
+IF Snd.cmd = 0 AND NOT DoneSts THEN
+                                                        //не удачная посылка  команды опроса
+    idb_fb_QueueEx.RcvBuff[CP, PORT].ready  := 0;
+    idb_fb_QueueEx.RcvBuff[CP, PORT]        := rcv_NULL;
+        IF  (cnt MOD 2) = 0 THEN
+            db_BU.CP[CP].port[PORT].BU[cnt / 2].rcv[0] := idb_fb_QueueEx.RcvBuff[CP , PORT];
+            db_BU.CP[CP].port[PORT].BU[cnt / 2].rcv[0].invalid := 1;
+        //DebKK:28.05.14    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[cnt/2].PIPE[0]].Invalid:= 1;
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[cnt/2].PIPE[1]].Invalid:= 1;
+        ELSE 
+            db_BU.CP[CP].port[PORT].BU[(cnt - 1) / 2].rcv[1] := idb_fb_QueueEx.RcvBuff[CP,PORT];
+            db_BU.CP[CP].port[PORT].BU[(cnt - 1) / 2].rcv[1].invalid := 1;
+        //DebKK:28.05.14    db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[(cnt-1)/2].PIPE[0]].Invalid:= 1;
+            db_PIPE.P[db_BU.CP[CP].PORT[PORT].BU[(cnt-1)/2].PIPE[1]].Invalid:= 1;
+        END_IF;
+ END_IF; 
+   
+IF Snd.cmd = 2 AND NOT DoneSts THEN
+    idb_fb_QueueEx.RcvBuff[CP,PORT] := rcv_NULL;
+    
+    IF idb_fb_DownloadSnd.cnt_out[CP, PORT] > 1 THEN 
+        dwnl_sucsess[CP, PORT, cnt / 2] := 1;
+    END_IF;
+END_IF; 
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_StatusRcv  fb_StatusRcv
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+
+

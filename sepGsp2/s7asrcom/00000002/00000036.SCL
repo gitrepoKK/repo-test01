@@ -1,0 +1,234 @@
+(* Fb253_Watch.scl - циклическое наблюдение за состоянием, командами, ошибками.
+*)
+
+//========================================================================
+
+Function_Block fb_Watch //Fb253 
+Title = 'Наблюдение за состоянием, командами, ошибками'
+Version: '1.0'
+Author: Konst
+Name: Watch
+Family: Main
+
+Var_Temp
+ i1, j1 : int;
+ n1, ni1, ni2 : int;
+ ndt1 : dt;
+ nr1 : real;
+End_Var
+
+// Статические переменные
+Var  
+ DoAutoControl : bool; // true - выполнять алгоритм автоматического управления
+ ControlJob : int; // код задания команд по управлению : 0-нет\1-run\2-stop\3-"+5"\4-"-5"
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+(* 
+      1. Отслеживание состояний по "отладочному" управлению кранами ЭПУУ по 
+   сигналам SignalCloseOff, SignalOpenOff, SignalCopyToEmul из DbKranPpuAdr.
+*)
+
+(* 
+      1.1. Отслеживание состояния флага DbKranPpu.HandPushOff о выключении режима
+   HandPush со снятием управляющих сигналов для всех кранов.
+      Notes! n1) М. использоваться не только для отладки, а как выключения на всех 
+   кранах режима "HandPush" и "сброс" всех реальных сигналов закрытия и открытия.
+*)
+
+if DbKranPpu.HandPushOff
+then 
+  for i1:=1 to DbKranPpu.numKrPpu do
+    DbKranPpu.KranPpuParam[i1].CmdKrPpuHandPush:=0; // для снятия ручного директивного управлення
+  end_for; // for i1
+  DbKranPpu.SignalCloseOff:=true; // выключить Выходные сигналы закрытия для всех кранов
+  DbKranPpu.SignalOpenOff:=true; // выключить Выходные сигналы открытия для всех кранов
+ 
+  DbKranPpu.HandPushOff:=false;  // до следующей команды 
+end_if; // if DbKranPpuAdr.SignalCloseOff
+
+(* 
+      1.2. Отслеживание состояния флага DbKranPpu.SignalCloseOff о выключении 
+   выходных сигналов закрытия для всех кранов.
+      Notes! n1) М. использоваться не только для отладки, а как "сброс" реальных 
+   сигналов закрытия для всех кранов.
+*)
+
+if DbKranPpu.SignalCloseOff
+then 
+  for i1:=1 to DbKranPpu.numKrPpu do
+    DbKranPpu.KranPpuParam[i1].KrToCloseW_HandPush:=0; // для снятия сигнала закрытия при CmdKrPpuHandPush=1
+    DbKranPpu.KranPpuParam[i1].KrToCloseW:=0; // для снятия сигнала (всегда или только если нет операций?)
+//    Q[DbKranPpuAdr.KranPpuAdrParam[i1,5].adr1,
+//      DbKranPpuAdr.KranPpuAdrParam[i1,5].adr2]:=0; // // дискрет закрытия снят
+  end_for; // for i1
+  DbKranPpu.SignalCloseOff:=false;  // до следующей команды 
+end_if; // if DbKranPpuAdr.SignalCloseOff
+
+(* 
+      1.3. Отслеживание состояния флага DbKranPpuAdr.SignalOpenOff о выключении 
+   выходных сигналов открытия для всех кранов.
+      Notes! n1) М. использоваться не только для отладки, а как "сброс" реальных 
+   сигналов открытия для всех кранов.
+    n2) М. перенести в DbKranPpu.
+*)
+
+if DbKranPpu.SignalOpenOff
+then 
+  for i1:=1 to DbKranPpu.numKrPpu do
+    DbKranPpu.KranPpuParam[i1].KrToOpenW_HandPush:=0; // для снятия сигнала открытия при CmdKrPpuHandPush=1
+    DbKranPpu.KranPpuParam[i1].KrToOpenW:=0; // для снятия сигнала (всегда или только если нет операций?)
+//    Q[DbKranPpuAdr.KranPpuAdrParam[i1,6].adr1,
+//      DbKranPpuAdr.KranPpuAdrParam[i1,6].adr2]:=0; // // дискрет SignalOpenOff снят
+  end_for; // for i1
+  DbKranPpu.SignalOpenOff:=false;  // до следующей команды 
+end_if; // if DbKranPpuAdr.SignalOpenOff
+
+(* 
+      1.4. Отслеживание состояния флага DbKranPpuAdr.SignalCopyToEmul о копировании
+   реальных I[],Q[] сигналов кранов в виртуальные.
+      Note! Используется для отладки по управлению кранами ЭПУУ.
+*)
+
+if DbKranPpuAdr.SignalCopyToEmul
+then // копирование
+  for i1:=1 to DbKranPpu.numKrPpu do
+  // Присваивание реальных значений входов I[] кранов в значения виртуальных сигналов 
+    for j1:=1 to 4 do
+      DbKranPpuAdr.KranPpuAdrParam[i1,j1].Value:=I[DbKranPpuAdr.KranPpuAdrParam[i1,j1].adr1,
+                                                   DbKranPpuAdr.KranPpuAdrParam[i1,j1].adr2];
+    end_for; // for j1
+
+  // Присваивание реальных значений вsходов Q[] кранов в значения виртуальных сигналов 
+    for j1:=5 to 6 do
+      DbKranPpuAdr.KranPpuAdrParam[i1,j1].Value:=Q[DbKranPpuAdr.KranPpuAdrParam[i1,j1].adr1,
+                                                   DbKranPpuAdr.KranPpuAdrParam[i1,j1].adr2];
+    end_for; // for j1
+  end_for; // for i1
+  DbKranPpuAdr.SignalCopyToEmul:=false;  // копирование 1 раз 
+end_if; // if DbKranPpuAdr.lblSignalCopyForEmul
+
+
+(* 
+      1.5. SCADA..взаимодействие
+*)
+
+  for i1:=1 to DbKranPpu.numKrPpu do
+ 
+    if DbKranPpu.KranPpuParam[i1].HmiKrToClose
+    then // подана команда "закрыть"
+      DbKranPpu.KranPpuParam[i1].CmdKrPpu_Next:=1;
+      DbKranPpu.KranPpuParam[i1].HmiKrToClose:=false;
+    end_if; // if DbKranPpu.KranPpuParam[i1].HmiKrToClose
+
+     if DbKranPpu.KranPpuParam[i1].HmiKrToOpen
+    then // подана команда "открыть"
+      DbKranPpu.KranPpuParam[i1].CmdKrPpu_Next:=2;
+      DbKranPpu.KranPpuParam[i1].HmiKrToOpen:=false;
+    end_if; // if DbKranPpu.KranPpuParam[i1].HmiKrToOpen
+
+ 
+  end_for; // for i1
+
+(* 
+      2. Обработка битовых сообщений.
+*)
+
+(* 
+      2.1. Обработка битовых сообщений для AI-датчиков.
+   lblBound : int; // Признак наруш. границ:-1-неопр\0-Норма\1-LoLo\2-Lo\3-Hi\4-HiHi\>4-ошЗадГраниц
+*)
+
+  for n1:=0 to DbSensAI.numSensAIParam do // цикл по числу датчиков на AI-входах
+
+   case DbSensAI.SensAIParam[n1].lblBound of
+  
+   0 : // норма 
+      DbBitMess.Mess_AI_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Norm, NumPos:=n1+1, BitVal_W:=1);
+      DbBitMess.Mess_AI_LoLo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_LoLo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Lo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Lo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Hi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Hi, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_HiHi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_HiHi, NumPos:=n1+1, BitVal_W:=0);
+
+   1 : // LoLo : нарушение НАГ 
+      DbBitMess.Mess_AI_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Norm, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_LoLo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_LoLo, NumPos:=n1+1, BitVal_W:=1);
+      DbBitMess.Mess_AI_Lo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Lo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Hi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Hi, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_HiHi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_HiHi, NumPos:=n1+1, BitVal_W:=0);
+
+   2 : // Lo : нарушение НПГ 
+      DbBitMess.Mess_AI_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Norm, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_LoLo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_LoLo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Lo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Lo, NumPos:=n1+1, BitVal_W:=1);
+      DbBitMess.Mess_AI_Hi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Hi, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_HiHi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_HiHi, NumPos:=n1+1, BitVal_W:=0);
+
+   3 : // Hi : нарушение ВПГ 
+      DbBitMess.Mess_AI_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Norm, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_LoLo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_LoLo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Lo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Lo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Hi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Hi, NumPos:=n1+1, BitVal_W:=1);
+      DbBitMess.Mess_AI_HiHi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_HiHi, NumPos:=n1+1, BitVal_W:=0);
+
+   4 : // HiHi : нарушение ВАГ 
+      DbBitMess.Mess_AI_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Norm, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_LoLo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_LoLo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Lo:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Lo, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_Hi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_Hi, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_AI_HiHi:=FcSetBit(ObjW:=DbBitMess.Mess_AI_HiHi, NumPos:=n1+1, BitVal_W:=1);
+
+   end_case; //case DbSensAI.SensAIParam[n1].lblBound
+ 
+  end_for; // for n1
+
+(* 
+      2.2. Обработка битовых сообщений для кранов Ppu.
+*)
+
+  for n1:=1 to DbKranPpu.numKrPpu do
+
+   // закрыт\открыт
+   case DbKranPpu.KranPpuParam[n1].State of
+   1 : // кран закрыт: 
+     DbBitMess.Mess_KrPpu_Close:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Close, NumPos:=n1, BitVal_W:=1);
+     DbBitMess.Mess_KrPpu_Open:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Open, NumPos:=n1, BitVal_W:=0);
+   2 : // кран открыт: 
+     DbBitMess.Mess_KrPpu_Close:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Close, NumPos:=n1, BitVal_W:=0);
+     DbBitMess.Mess_KrPpu_Open:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Open, NumPos:=n1, BitVal_W:=1);
+   end_case; //case DbKranPpu.KranPpuParam[n1].State
+
+   // ошибки закрытия\открытия
+   if (DbKranPpu.KranPpuParam[n1].OperErrorLbl)
+   then
+     case DbKranPpu.KranPpuParam[n1].OperErrorNum of
+     11,12 : // ошибки при закрытии: 
+       DbBitMess.Mess_KrPpu_ErrClose:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrClose, NumPos:=n1, BitVal_W:=1);
+       DbBitMess.Mess_KrPpu_ErrOpen:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrOpen, NumPos:=n1, BitVal_W:=0);
+     21,22 : // ошибки при открытии: 
+       DbBitMess.Mess_KrPpu_ErrClose:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrClose, NumPos:=n1, BitVal_W:=0);
+       DbBitMess.Mess_KrPpu_ErrOpen:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrOpen, NumPos:=n1, BitVal_W:=1);
+     end_case; //case DbKranPpu.KranPpuParam[n1].State
+   end_if; // if (DbKranPpu.KranPpuParam[n1].OperErrorLbl)
+
+   // неисправность крана
+   if (DbKranPpu.KranPpuParam[n1].KrDefectFatal or DbKranPpu.KranPpuParam[n1].KrDefectNote)
+   then
+     DbBitMess.Mess_KrPpu_ErrFatal:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrFatal, NumPos:=n1, BitVal_W:=1);
+     DbBitMess.Mess_KrPpu_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Norm, NumPos:=n1, BitVal_W:=0);
+   else
+     DbBitMess.Mess_KrPpu_ErrFatal:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_ErrFatal, NumPos:=n1, BitVal_W:=0);
+     DbBitMess.Mess_KrPpu_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_KrPpu_Norm, NumPos:=n1, BitVal_W:=1);
+   end_if; // if (DbKranPpu.KranPpuParam[n1].KrDefectFatal or..
+
+  end_for; // for n1:=1.. 
+
+end_function_block
+
+// Объявление Instance Db253 для FB253
+Data_Block idb_fb_Watch fb_Watch //DB253 FB253
+Begin
+End_Data_Block
+
+

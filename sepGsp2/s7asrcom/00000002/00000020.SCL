@@ -1,0 +1,49 @@
+
+FUNCTION_BLOCK fb_Restart
+//Инициализация значений при перезапуске
+VAR_TEMP
+    i   :INT;
+END_VAR
+    
+    FOR i := 0 TO 23 BY 1 DO
+        db_Cmmn.Restart_Post[i] := 1;
+    END_FOR;   
+                                                                        //Выбор посылки на передачу
+    fb_Solver.idb_fb_Solver(cnt := 0, CP := 0, PORT := 0, e_cnt := 0);
+    fb_Solver.idb_fb_Solver(cnt := 0, CP := 0, PORT := 1, e_cnt := 0);
+    fb_Solver.idb_fb_Solver(cnt := 0, CP := 1, PORT := 0, e_cnt := 0);
+    fb_Solver.idb_fb_Solver(cnt := 0, CP := 1, PORT := 1, e_cnt := 0);
+                                                                        //Присвоение посылки на передачу
+    idb_fb_QueueEx.snd_tmp[0, 0] := idb_fb_Solver.snd[0, 0];
+    idb_fb_QueueEx.snd_tmp[0, 1] := idb_fb_Solver.snd[0, 1];
+    idb_fb_QueueEx.snd_tmp[1, 0] := idb_fb_Solver.snd[1, 0];
+    idb_fb_QueueEx.snd_tmp[1, 1] := idb_fb_Solver.snd[1, 1];
+                                                                        //Присвоение счетчиков
+    idb_fb_QueueEx.cnt[0, 0] := idb_fb_Solver.cnt_out[0, 0];
+    idb_fb_QueueEx.cnt[0, 1] := idb_fb_Solver.cnt_out[0, 1];
+    idb_fb_QueueEx.cnt[1, 0] := idb_fb_Solver.cnt_out[1, 0];
+    idb_fb_QueueEx.cnt[1, 1] := idb_fb_Solver.cnt_out[1, 1];
+                                                                        //Запуск опроса с нулевого порта    
+    idb_fb_QueueEx.bsnd[0, 0] := 1;
+    idb_fb_QueueEx.bsnd[0, 1] := 0;
+    idb_fb_QueueEx.bsnd[1, 0] := 1;
+    idb_fb_QueueEx.bsnd[1, 1] := 0;
+                                                                        //Признак удачного приема    
+    idb_fb_QueueEx.done[0, 0] := 0;
+    idb_fb_QueueEx.done[0, 1] := 0;
+    idb_fb_QueueEx.done[1, 0] := 0;
+    idb_fb_QueueEx.done[1, 1] := 0;
+                                                                        //Заполнение структуру данных блока управления
+    fb_DataFill.idb_fb_DataFill();
+
+END_FUNCTION_BLOCK
+
+
+DATA_BLOCK idb_fb_Restart  fb_Restart
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK
+

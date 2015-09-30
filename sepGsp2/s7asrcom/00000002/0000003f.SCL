@@ -1,0 +1,187 @@
+TYPE udt_Pipe
+
+STRUCT
+    CP              :INT;
+    PORT            :INT;
+    BU              :INT;
+    ADDR            :BYTE;
+                                //краны 1,8,11 состояния     
+    Crane:ARRAY[0..2] OF STRUCT
+        Inv         :BOOL; 
+        RMCntr      :BOOL;         
+        RComm_Fault :BOOL;    
+        RCntr_State :BYTE;        
+        RState      :BYTE;         
+        RCntr_Open  :BYTE;      
+        RCntr_Close :BYTE;    
+        RHw_Error   :BYTE;      
+        //CntrEnableOpen  :BOOL:=0; //0 - нет доступа
+        //CntrEnableClose  :BOOL:=0; //0 - нет доступа
+        //NeisprNoUpr  :BOOL:=0; //0 - неисправность отсутствует
+        NeisprUpr  :BOOL:=0; //0 - неисправность отсутствует
+                             
+    END_STRUCT;
+                                //КРУ    
+    KRU:STRUCT
+        Inv         :BOOL;
+        RComm_Fault :BOOL;
+        RHw_Fault   :BOOL;
+        RCntr_Curr  :BOOL;
+        ROpen_Fault :BOOL;
+        RClose_Fault:BOOL;
+        RCntr_Switch:BOOL;
+        RCntr_State :BYTE;
+        RPos_Drv    :BYTE;
+        RCntr_Open  :BYTE;
+        RCntr_Close :BYTE;
+        RCntr_Pow   :BYTE;
+        RCal_Pos_Drv:REAL;    
+        RMContr     :REAL;         
+        RACntr      :REAL;       
+        RCurr       :REAL;
+        RP_PID      :REAL;
+        RI_PID      :REAL;
+        RD_PID      :REAL;
+        CntrEnable  :BOOL:=0; //0 - нет доступа
+        NeisprNoUpr  :BOOL:=0; //0 - неисправность отсутствует
+        NeisprUpr  :BOOL:=0; //0 - неисправность отсутствует
+    END_STRUCT;
+    
+    Press:STRUCT
+        Inv         :BOOL;
+        RWarnNE     :BOOL;
+        RBigNE      :BOOL;
+        RWr         :BOOL;
+        RA          :BYTE;
+        RF          :BYTE;
+        RVal        :REAL;
+        RUpThres    :REAL;
+        RDnThres    :REAL;
+        RUpYellow   :REAL;
+        RDnYellow   :REAL;
+        RUpRed      :REAL;
+        RDnRed      :REAL;
+        Delta       :INT;
+        Zones       :INT;
+    END_STRUCT;
+    
+    PPress:STRUCT
+        Inv         :BOOL;
+        RWr         :BOOL;
+        RA          :BYTE;
+        RF          :BYTE;
+        RVal        :REAL;
+        RUpThres    :REAL;
+        RDnThres    :REAL;
+        RUpYellow   :REAL;
+        RDnYellow   :REAL;
+        RUpRed      :REAL;
+        RDnRed      :REAL;
+        Delta       :INT;
+        Zones       :INT;
+    END_STRUCT;
+    
+    Temp:STRUCT
+        Inv         :BOOL;
+        RWr         :BOOL;
+        RA          :BYTE;
+        RF          :BYTE;
+        RVal        :REAL;
+        RUpThres    :REAL;
+        RDnThres    :REAL;
+        RUpYellow   :REAL;
+        RDnYellow   :REAL;
+        RUpRed      :REAL;
+        RDnRed      :REAL;
+        Delta       :INT;
+        Zones       :INT;
+    END_STRUCT;
+    
+    POST:STRUCT
+        RReq        :BOOL;
+        RVal        :BOOL;
+    END_STRUCT;
+    
+    FLOW:STRUCT
+        Inv         :BOOL;
+        RSwitch     :BOOL;
+        RWr         :BOOL;
+        RFault      :BOOL;
+        RVal        :REAL;
+        RUst        :REAL;
+        RDens       :REAL;
+        RDiamDiaf   :REAL;
+        RDiamIT     :REAL;
+        REqvSh      :REAL;
+        RPressBar   :REAL;
+        RCo2        :REAL;
+        RNitro      :REAL;
+        RRad        :REAL;
+        RCnt        :REAL;
+        RFlowHour   :REAL;
+        RFlowDay    :REAL;
+        bSetpoint   :BOOL;
+        bSetCalc    :BOOL;
+        bSetHBD     :BOOL;
+        bSetDBD     :BOOL;
+        currHcalc   :REAL;
+        prevHcalc   :REAL;
+        currDcalc   :REAL;
+        prevDcalc   :REAL;
+        deltaFlow   :REAL;
+        RiseFlow    :REAL;
+    END_STRUCT;
+    
+    WrkRegim:STRUCT
+        RSwRegWrk   :BOOL;
+        RGRP        :BOOL;
+        RCntrReg    :BYTE;
+        RRegWrk     :BYTE;
+    END_STRUCT;
+    
+    PipeMess:STRUCT
+        RAlarmRed   :BOOL;
+        RFaultTehn  :BOOL;
+        RFaultCntr  :BOOL;
+        RFaultHW    :BOOL;
+        RFaultInt   :BOOL;
+        RPermAlarm  :BOOL;
+        RRstIntFault:BOOL;
+        RRepair     :BOOL;
+        RGasNotBleed:BOOL;
+        RPipeGas    :BOOL;
+    END_STRUCT;
+    
+    Times:STRUCT
+        RTime       :ARRAY[0..10] OF BYTE;
+        RYear       :INT;
+        RMonth      :INT;
+        RDay        :INT;
+        RDay_of_Week:INT;
+        RHour       :INT;
+        RMinute     :INT;
+        RSecond     :INT;
+        RMSecond    :INT;
+      END_STRUCT;
+    
+    Ind             :INT;
+    Invalid         :BOOL;
+    CntrEnable      :BOOL;
+    PipeWrkRegim    :INT;
+    PipeSeason      :INT;
+    
+    cntrIOCranes    :BOOL;
+    cntrCCrane      :BOOL;
+    inCcIOCranes    :BOOL;
+    inCcCCrane      :BOOL;
+    inPmaxEkm       :BOOL;
+    inPminEkm       :BOOL;
+    cntrLedCCraneOP :BOOL;
+    inCCraneOP      :BOOL;
+    inCcPmaxEkm     :BOOL;
+    inCcPminEkm     :BOOL;
+    bAlarmStopWinCC :BOOL;
+    
+END_STRUCT
+
+END_TYPE

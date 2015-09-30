@@ -1,0 +1,20 @@
+
+FUNCTION fc_MsgHandlerCycle : VOID 
+
+VAR_INPUT 
+    CP      :INT;
+    PORT    :INT;
+    BU      :INT;
+END_VAR
+
+VAR_TEMP
+    i       :INT;
+END_VAR
+
+FOR i := 0 TO 1 BY 1 DO
+    fc_MsgHandlerCrane(cp := cp, port := port, bu := bu, p :=i );  
+END_FOR;    
+
+
+
+END_FUNCTION

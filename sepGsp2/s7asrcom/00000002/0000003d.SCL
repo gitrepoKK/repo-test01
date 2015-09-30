@@ -1,0 +1,39 @@
+//////////////////////////////////////////////////////////////////////////////
+
+(*
+
+TYPE udt_s7DT
+    STRUCT
+        t :ARRAY[0..7] OF BYTE;
+        // 0 - year, only two last digits
+        // 1 - month 1 - 12
+        // 2 - days   0 - 31
+        // 3 - hours 24h format
+        // 4 - minutes 0 - 60
+        // 5 - seconds 0 - 60
+        // 6 - millisecond 0 - 999
+    END_STRUCT
+END_TYPE
+
+FUNCTION fc_SetClk : VOID 
+
+VAR_TEMP
+    s7DT: udt_s7DT;
+    currDT AT s7DT: DT ;
+    ret :INT;
+END_VAR
+    s7DT.t[0] := WORD_TO_BYTE(INT_TO_BCD_WORD(2000 - db_PIPE.P_snd[0].Times.WYear));
+    s7DT.t[1] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WMonth));
+    s7DT.t[2] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WDay));
+    s7DT.t[3] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WHour));
+    s7DT.t[4] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WMinute));
+    s7DT.t[5] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WSecond));
+    s7DT.t[6] := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WMSecond DIV 10));
+    s7DT.t[7] := SHL(in := WORD_TO_BYTE(INT_TO_BCD_WORD(db_PIPE.P_snd[0].Times.WMSecond - (db_PIPE.P_snd[0].Times.WMSecond DIV 10) * 10)), n := 4);
+    IF s7DT.t[1] <> 0 AND s7DT.t[2] <> 0 THEN  
+        ret := SET_CLK(PDT := currDT);
+    END_IF;    
+
+END_FUNCTION
+*)
+

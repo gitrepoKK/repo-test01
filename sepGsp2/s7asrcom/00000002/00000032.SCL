@@ -1,0 +1,9 @@
+TYPE udt_Rcv
+
+STRUCT
+    rcv     :ARRAY[0..126] OF WORD;
+    Ready   :BOOL;
+    Invalid :BOOL;
+END_STRUCT
+
+END_TYPE

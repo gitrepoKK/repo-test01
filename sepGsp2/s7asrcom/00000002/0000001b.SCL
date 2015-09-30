@@ -1,0 +1,86 @@
+    
+FUNCTION_BLOCK fb_Cnvt_Float1
+//Разборка  переменных типа real первой посылки,  присвоение переменных
+VAR_TEMP
+    i   :INT;
+    j   :INT;
+    k   :INT;
+ 
+END_VAR    
+
+VAR  
+    tmp :INT;
+    a   :REAL;
+    tmp1:DWORD;
+    tmp2:DWORD;  
+END_VAR
+
+
+FOR i := 0 TO 1 BY 1 DO
+     FOR j := 0 TO 1 BY 1 DO
+        FOR k := 0 TO 2 BY 1 DO
+            IF db_BU.CP[i].PORT[j].BU[k].rcv[0].ready THEN
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].FLOW.RUst          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[0])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].FLOW.RVal          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[1])) / 100;
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[2]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[3]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].FLOW.RCnt          := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0;
+                tmp2 := DW#2#0;
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[4]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[5]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].FLOW.RFlowHour     := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0;
+                tmp2 := DW#2#0;          
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[6]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[7]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].FLOW.RFlowDay      := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0;
+                tmp2 := DW#2#0;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RACntr         := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[8] )) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RMContr        := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[9] )) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCal_Pos_Drv   := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[10])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].KRU.RCurr          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[11])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Press.RVal         := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[12])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].PPress.RVal        := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[13])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[0]].Temp.RVal          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[14])) / 100;
+            
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].FLOW.RUst          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[15])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].FLOW.RVal          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[16])) / 100;
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[17]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[18]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].FLOW.RCnt          := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0
+                ;tmp2 := DW#2#0;
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[19]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[20]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].FLOW.RFlowHour     := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0;
+                tmp2 := DW#2#0;
+                tmp1 := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[21]);
+                tmp2 := SHL(in := WORD_TO_DWORD(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[22]),n := 16);
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].FLOW.RFlowDay      := DWORD_TO_REAL(tmp1 OR tmp2);
+                tmp1 := DW#2#0;
+                tmp2 := DW#2#0;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RACntr         := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[23])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RMContr        := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[24])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCal_Pos_Drv   := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[25])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].KRU.RCurr          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[26])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Press.RVal         := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[27])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].PPress.RVal        := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[28])) / 100;
+                db_PIPE.P[db_BU.CP[i].PORT[j].BU[k].PIPE[1]].Temp.RVal          := INT_TO_REAL(WORD_TO_INT(db_BU.CP[i].PORT[j].BU[k].rcv[0].rcv[29])) / 100;
+            
+            END_IF;   
+        END_FOR;       
+    END_FOR;
+END_FOR;
+        
+END_FUNCTION_BLOCK
+
+DATA_BLOCK idb_fb_Cnvt_Float1  fb_Cnvt_Float1
+//
+// Block Comment...
+//
+BEGIN
+
+END_DATA_BLOCK

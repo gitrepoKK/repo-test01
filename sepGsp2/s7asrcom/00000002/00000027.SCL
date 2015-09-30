@@ -1,0 +1,45 @@
+
+FUNCTION fc_CRC16 : WORD
+//Стандартный алгоритм расчета CRC16
+//
+VAR_TEMP
+    i       :INT;
+    j       :INT;
+    ind     :INT;
+    flag    :BOOL;
+    tmp     :WORD;
+    data_b  :ARRAY[0..254] OF BYTE;
+END_VAR
+
+VAR_INPUT
+    CRC     :WORD;
+    length  :INT;    
+    data    :ARRAY[0..126] OF WORD; 
+END_VAR
+
+fc_CRC16 := CRC;
+
+FOR j := 0 TO length - 1 BY 2 DO
+    data_b[j] := WORD_TO_BYTE(SHR(in := data[j / 2],n := 8));
+    data_b[j + 1] := WORD_TO_BYTE(SHR(in := SHL(in := data[j / 2],n := 8),n := 8));
+END_FOR;    
+
+FOR j := 0 TO length - 1 BY 1 DO
+    
+    fc_CRC16 := fc_CRC16 XOR BYTE_TO_WORD(data_b[j]) ;
+    
+    FOR i := 1 TO 8 BY 1 DO
+        IF WORD_TO_BOOL(fc_CRC16 AND W#16#0001) THEN
+            flag := 1;
+        END_IF;
+            
+        fc_CRC16 := SHR(in := fc_CRC16,n := 1);
+            
+        IF flag THEN 
+            fc_CRC16 := fc_CRC16 XOR W#16#A001;
+            flag := 0;
+        END_IF; 
+    END_FOR;
+END_FOR;
+       
+END_FUNCTION

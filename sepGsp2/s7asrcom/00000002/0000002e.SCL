@@ -1,0 +1,18 @@
+
+ORGANIZATION_BLOCK ob_Main
+
+VAR_TEMP
+    info : ARRAY[0..19] OF BYTE;
+END_VAR
+//Основной блок работы программы 
+                            //если изменилась конфигурация
+IF db_Cmmn.BU_recnfg THEN 
+    fb_DataFill.idb_fb_DataFill();
+    db_Cmmn.BU_recnfg := 0;
+END_IF;
+                             //Опрос блоков и.т.д
+fb_QueueEx.  idb_fb_QueueEx();
+fb_Test.     idb_fb_Test();
+
+
+END_ORGANIZATION_BLOCK

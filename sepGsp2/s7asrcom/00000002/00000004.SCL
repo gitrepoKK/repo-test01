@@ -1,0 +1,512 @@
+(* 
+      Fb251_ParScan.scl - циклический опрос значений параметров для сепараторов 
+   с DI- и AI-входов модулей Siemens).
+*)
+
+//========================================================================
+
+Function_Block fb_ParScan 
+Title = 'Циклический опрос параметров'
+Version: '1.0'
+Author: Konst
+Name: ParScan
+Family: Main
+
+Var_Temp
+ i1, it1, j1, n1, indP : int;
+ ndt1 : DT;
+ nr1,nr2 : real;
+ nw1 : word;
+End_Var
+
+// Статические переменные
+Var  
+ Cycle : Real:=0.0;
+
+ // Для таймера Tm1
+ Tm1 : s5time;
+ Tm1Impuls : bool:=1;
+ Tm1Value : s5time:=t#20ms;  // длительность одного кванта времени 
+ // Для работы с квантами времени таймера Tm1
+ Quant_Tm1 : int:=1; // счетчик квантов времени, отсчитываемых таймером Tm1
+ nQuant_Tm1 : int:=10; // число квантов времени, насчитываемых таймером Tm1
+ 
+ // Для таймера Tm2 - проверка обновления значений параметров в БУ
+ Tm2 : s5time;
+ Tm2Impuls : bool:=1;
+ Tm2Value : s5time:=t#3s;  // период проверки 
+
+// Для работы с температурными датчиками 
+ resScale_SensAIParam : word;
+ vt1 : real;
+ BoundNotControl : real :=888.888; // Уставки с таким значением не контролируются
+                            // Note ! Д.б. соответствие по величине при назначениях уставок для DbSensAI
+ BoundLbl : Int;  // промежуточная для вычисления  DbSensAI.SensAIParam[n1].lblBound  
+ ni_RangeAiNorm : int :=27648; 
+ nr_RangeAiNorm : real;     
+ SubstErrVal : real :=999.9; // Значение для замещения ошибочного значения параметра (исп.для AI-датчиков и в db_PIPE)
+End_Var    
+
+//=======================  Instructions  ===============================>
+
+nr_RangeAiNorm:=int_to_real(ni_RangeAiNorm); // для пересчета в мА цифрового значения (PIW[]) AI-датчика 
+
+(*
+      1. Запуск таймера на отсчет квантов времени длительностью Tm1Value.
+   Note! Используется принцип выполнения разных работ в отведенные им кванты времени.
+*)
+
+
+Tm1:=s_odt(t_no:=1,s:=not Tm1Impuls,tv:=Tm1Value,q:=Tm1Impuls); //t#50ms t#1s
+if Tm1Impuls // импульс приходит через 20 ms
+then
+ Quant_Tm1 :=Quant_Tm1+1; // наступает очередной квант времени
+ if Quant_Tm1>nQuant_Tm1 then Quant_Tm1:=1; end_if; // после последнего кванта наступает нулевой
+end_if;
+
+(*
+      2. Циклическое чтение и обработка массива сигналов с AI-входов модулей Siemens ([4ma-20ma]).
+*)
+
+ if Quant_Tm1>=0 and Quant_Tm1<=5 // д.б. согласовано с диапазоном квантов для опроса других параметров
+ then
+
+ 
+  for n1:=0 to DbSensAI.numSensAIParam do // цикл по числу датчиков на AI-входах
+
+    /// ++++++++++++++++++++++  Deb : Подстановочные значения :
+
+    if (DbSensAI.SensAIParam[n1].lblSubstCalc)
+    then
+      DbSensAI.SensAIParam[n1].Value_Subst:=DbSensAI.SensAIParam[n1].Value_Subst+
+      DbSensAI.SensAIParam[n1].SubstIncrement; 
+      if DbSensAI.SensAIParam[n1].Value_Subst >= DbSensAI.SensAIParam[n1].HiMeasure  
+      then 
+        DbSensAI.SensAIParam[n1].Value_Subst:=DbSensAI.SensAIParam[n1].HiMeasure;
+        DbSensAI.SensAIParam[n1].SubstIncrement:=-1*DbSensAI.SensAIParam[n1].SubstIncrement;
+      end_if; // if DbSensAI.SensAIParam[n1].Value_Subst >= 100
+   
+      if DbSensAI.SensAIParam[n1].Value_Subst <= DbSensAI.SensAIParam[n1].LoMeasure 
+      then 
+        DbSensAI.SensAIParam[n1].Value_Subst:=DbSensAI.SensAIParam[n1].LoMeasure;
+        DbSensAI.SensAIParam[n1].SubstIncrement:=-1*DbSensAI.SensAIParam[n1].SubstIncrement;
+      end_if; // if DbSensAI.SensAIParam[n1].Value_Subst <= 0
+    end_if; // if (DbSensAI.SensAIParam[n1].lblSubstCalc)
+
+(*
+      2.1. Сихронизация значений уставок для очередного AI-датчика между ПЛК и 
+   ВУ по значению HmiSyncRange : 0-не проводить \ 1-синхрПЛК=>ВУ \ 2-синхрВУ=>ПЛК.
+*)
+
+   case DbSensAI.SensAIParam[n1].HmiSyncRange of
+   1 : // синхронизация ПЛК=>ВУ- копия из рабочих тегов ПЛК в теги для корректировки уставок на ВУ: 
+     DbSensAI.SensAIParam[n1].HmiBoundLoLo:=DbSensAI.SensAIParam[n1].BoundLoLo;
+     DbSensAI.SensAIParam[n1].HmiBoundLo:=DbSensAI.SensAIParam[n1].BoundLo;
+     DbSensAI.SensAIParam[n1].HmiBoundHi:=DbSensAI.SensAIParam[n1].BoundHi;
+     DbSensAI.SensAIParam[n1].HmiBoundHiHi:=DbSensAI.SensAIParam[n1].BoundHiHi;
+     DbSensAI.SensAIParam[n1].HmiLoMeasure:=DbSensAI.SensAIParam[n1].LoMeasure;
+     DbSensAI.SensAIParam[n1].HmiHiMeasure:=DbSensAI.SensAIParam[n1].HiMeasure;
+     DbSensAI.SensAIParam[n1].HmiLoWorkRange_mA:=DbSensAI.SensAIParam[n1].LoWorkRange_mA;
+     DbSensAI.SensAIParam[n1].HmiHiWorkRange_mA:=DbSensAI.SensAIParam[n1].HiWorkRange_mA;
+     DbSensAI.SensAIParam[n1].HmiSyncRange:=0; // отметка: синхронизировано,больше не проводить
+  
+   2 : // синхронизация ВУ=>ПЛК- копия из тегов для корректировки уставок на ВУ в рабочие теги ПЛК:   
+     DbSensAI.SensAIParam[n1].BoundLoLo:=DbSensAI.SensAIParam[n1].HmiBoundLoLo;
+     DbSensAI.SensAIParam[n1].BoundLo:=DbSensAI.SensAIParam[n1].HmiBoundLo;
+     DbSensAI.SensAIParam[n1].BoundHi:=DbSensAI.SensAIParam[n1].HmiBoundHi;
+     DbSensAI.SensAIParam[n1].BoundHiHi:=DbSensAI.SensAIParam[n1].HmiBoundHiHi;
+     DbSensAI.SensAIParam[n1].LoMeasure:=DbSensAI.SensAIParam[n1].HmiLoMeasure;
+     DbSensAI.SensAIParam[n1].HiMeasure:=DbSensAI.SensAIParam[n1].HmiHiMeasure;
+     DbSensAI.SensAIParam[n1].LoWorkRange_mA:=DbSensAI.SensAIParam[n1].HmiLoWorkRange_mA;
+     DbSensAI.SensAIParam[n1].HiWorkRange_mA:=DbSensAI.SensAIParam[n1].HmiHiWorkRange_mA;
+     DbSensAI.SensAIParam[n1].HmiSyncRange:=0; /// отметка: синхронизировано,больше не проводить
+   end_case;
+
+(*
+      2.2. Чтение значения с аналогого входа в переменную типа Word и его обработка : 
+   вычисление Value - значения AI-сигнала в физич. единицах (напр. градС) \ пересчёт в мА \
+   вычисление lblErr - признака ошибки для AI-сигнала.
+      Notes! n1) Изменен метод расчета физической величины. Ранее (напр. в AvoGas-Вуктыл)
+   использовалась функция Scale, использующая полученное значение типа Int и нижний и верхний
+   предел измерения датчика в физич. единицах (напр. [-50;+100градС]). Её недостаток в том,
+   что она не обрабатывает сигналы вне диапазона [4;20mA]. А на практике токовое значение датчика
+   может колебаться и быть например 3.85 мА и его тоже надо считать нормой - это просто "дребезг"
+   датчика на граничных значениях (датчики не идеальны). Чтобы убрать "дребезг" часто расширяют
+   рабочий (номинальный) диапазон [4;20mA] на +-2% - до [3.8;20.2mA] (или другой по заданию 
+   пользователя), исходя из особенностей конкретного датчика). 
+    Поэтому здесь применен собственный метод : Пересчет сигнала в мА - чтобы отслеживать попадание
+   в расширенный номинальный диапазон. Затем исходя из соответсвия : [4;20mA] <==> Физические 
+   пределы для датчика [4;20mA](напр.[-50;+100градС]) по формуле расчитываем значение в физических
+   единицах.
+    n2) Всё реализовано пока только для обработки сигналов из диапазона [4;20mA]. Сделано как проба
+   и универсальности нет (напр. как у функции Scale()). 
+*)
+
+// чтение значения PIW[adrPIW] на входe AI для n1-го датчика
+   nw1:=PIW[DbSensAI.SensAIParam[n1].adrPIW]; 
+   DbSensAI.SensAIParam[n1].ValueIn:=word_to_int(nw1); // пре-обрабатанное физ. значение в десятичной с-ме
+
+(*
+      2.2.1. Вычисление Value_mA, Value. "Начальное" вычисление lblErr - признака
+   ошибки для AI-сигнала (только значения "0" или "3").
+      Алгоритм : В обычном режиме сначала вычисляем Value_mA, затем из него Value.
+   При этом, если ValueIn равнялось 32767, то интерпретируем это как "обрыв" датчика
+   и не вычисляем значение Value.
+      Если включена обработка подстановочного значения, то присваиваем его в Value
+   и делаем искусственное вычисление Value_mA из Value_Subst (чтобы показать пользователю
+   скольки мА соответствует подстановочное значение).   
+      Notes! n1) Value_mA рассчитываем всегда - даже для ValueIn=32767.
+*)
+
+   it1:=Read_Clk(CDT := ndt1); // ndt1 - текущее время ПЛК
+   DbSensAI.SensAIParam[n1].tStamp:=ndt1; 
+
+   DbSensAI.SensAIParam[n1].lblErr:=0; // Номинальный диапазон +- 2% (предполагаем)
+
+   if (DbSensAI.SensAIParam[n1].lblModeSubst)
+   then // Режим "Подстановочное значение" включен
+     DbSensAI.SensAIParam[n1].Value:=DbSensAI.SensAIParam[n1].Value_Subst;
+     //искусственное вычисление Value_mA из Value_Subst
+     DbSensAI.SensAIParam[n1].Value_mA:=4+16*DbSensAI.SensAIParam[n1].Value_Subst/
+                             (DbSensAI.SensAIParam[n1].HiMeasure-DbSensAI.SensAIParam[n1].LoMeasure);
+   else // Обычный режим обработки : вычисление Value_mA, затем вычисление Value
+     // Вычисление Value_mA
+     nr1:=int_to_real(DbSensAI.SensAIParam[n1].ValueIn); // для вычисления мА в формуле д.б. тип real
+     DbSensAI.SensAIParam[n1].Value_mA:=4+16*nr1/nr_RangeAiNorm;  // пересчет в мА
+     if DbSensAI.SensAIParam[n1].ValueIn=32767  // Обрыв датчика
+     then // пре-обрабатанное физ. значение =32767 - "обрыв датчика" (или не сконфигурирован модуль AI для этого адреса)
+       DbSensAI.SensAIParam[n1].lblErr:=3; // Обрыв датчика (Фиксируем\ Value не вычисляем)
+     else // сигнал нормальный
+     // Вычисление Value через значение мА
+       DbSensAI.SensAIParam[n1].Value:=DbSensAI.SensAIParam[n1].LoMeasure+
+           ((DbSensAI.SensAIParam[n1].Value_mA-4)*
+            (DbSensAI.SensAIParam[n1].HiMeasure-DbSensAI.SensAIParam[n1].LoMeasure))/16;
+     end_if; // if DbSensAI.SensAIParam[n1].ValueIn=32767
+   end_if; // if (DbSensAI.SensAIParam[n1].lblModeSubstOn)
+     
+(*
+      2.2.2. До-вычисление lblErr - признака ошибки для AI-сигнала (значения "1"\"2").
+      Признак ошибки lblErr : 0-нет ошибок \ 1-отриц. переполн(<3.8мА) \ 2-пере-
+   полнение (>20.2мА) \ 3-обрыв датчика.
+      Предполагается использовать lblErr следующим образом : 1) Анализ на нарушение
+   уставок делать для всех, кроме lblErr=3. (М.б. правильным было бы делать только 
+   для "0". Но пока делаем для "любых" сигналов, кроме "обрыва". А наличие ошибки
+   м. отображать отдельным способом по этому тегу (напр. рамкой))
+      2) Для 3-х Ai - уровней жидкости автоматические продувки будут также только
+   при lblErr<>3. (Там всё равно есть уставки регулирования, которые д.б. в диапа-
+   зоне [3.8-20.2]мА).
+*)
+ 
+   if DbSensAI.SensAIParam[n1].lblErr<>3
+   then //
+     if DbSensAI.SensAIParam[n1].Value_mA < DbSensAI.SensAIParam[n1].LoWorkRange_mA
+     then 
+       DbSensAI.SensAIParam[n1].lblErr:=1; // Отрицательное переполнение (ниже -2%)
+     end_if; // if DbSensAI.SensAIParam[n1].Value_mA < DbSensAI.SensAIParam[n1].LoWorkRange_mA
+
+     if DbSensAI.SensAIParam[n1].Value_mA > DbSensAI.SensAIParam[n1].HiWorkRange_mA
+     then 
+       DbSensAI.SensAIParam[n1].lblErr:=2; // Переполнение (выше +2%)
+     end_if; // if DbSensAI.SensAIParam[n1].Value_mA > DbSensAI.SensAIParam[n1].HiWorkRange_mA
+   end_if; // if DbSensAI.SensAIParam[n1].lblErr<>3
+ 
+(*
+      2.3. Вычисление признака нарушения предупредительных границ lblBound=-1-неопр
+   \0-Норма\1-LoLo\2-Lo\3-Hi\4-HiHi\>4-ошЗаданияГраниц.
+      Анализ нарушения границ производится только для случаев : нет "обрыва" 
+   датчика и датчик не в "ремонте", иначе присваивается "-1".
+      Notes! n1) Игнорируется контроль значений уставок со значением=BoundNotControl (888.888)
+      n2) Если lblBound>4, то это означает неправильно заданные границы (напр. BoundLoLo>BoundHiHi)
+   (Значения lblBound при конфликтах границ : 14-ВАГ&НАГ;  24-ВАГ&НПГ; 13-ВПГ&НАГ; 23-ВПГ&НПГ).  
+*)
+
+   DbSensAI.SensAIParam[n1].lblBound:=-1; // нач. значение : неопределено (не обрабатывалось)
+   vt1:=DbSensAI.SensAIParam[n1].Value; // исп. как значение Value при анализе границ (для совместимости с 1-м методом)
+
+   if (DbSensAI.SensAIParam[n1].lblErr<>3) and not(DbSensAI.SensAIParam[n1].lblModeRepair)
+   then // анализ нарушения границ для случаев : нет "обрыва" датчика и датчик не в "ремонте"
+     BoundLbl:=0; // lblBound=0 - Норма
+     // Анализ в меньшуюю сторону (LoLo, Lo) :
+     if (vt1<DbSensAI.SensAIParam[n1].BoundLoLo and DbSensAI.SensAIParam[n1].BoundLoLo<>BoundNotControl) //if 3
+      then // lblBound=1 - НАГ
+       BoundLbl:=1;
+      elsif (vt1<DbSensAI.SensAIParam[n1].BoundLo and DbSensAI.SensAIParam[n1].BoundLo<>BoundNotControl)
+      then // lblBound=2 - НПГ
+       BoundLbl:=2;
+      end_if; // if (vt1<DbSensAI.SensAIParam[n1].BoundLoLo //if 3
+      // Анализ в большую сторону (HiHi, Hi) :
+      if (vt1>DbSensAI.SensAIParam[n1].BoundHiHi and DbSensAI.SensAIParam[n1].BoundHiHi<>BoundNotControl) //if 4
+      then // lblBound=4 - ВАГ
+       BoundLbl:=4+BoundLbl*10;
+      elsif (vt1>DbSensAI.SensAIParam[n1].BoundHi and DbSensAI.SensAIParam[n1].BoundHi<>BoundNotControl)
+      then // lblBound=3 - ВПГ
+       BoundLbl:=3+BoundLbl*10;
+      end_if; // (vt1>DbSensAI.SensAIParam[n1].BoundHiHi.. //if 4
+      DbSensAI.SensAIParam[n1].lblBound:=BoundLbl;
+    end_if; // if DbSensAI.SensAIParam[n1].lblErr=0
+
+(*
+      2.4. Дополнительная обработка. Назначение HmiSensAiDefect - метки о 
+   недостоверных показаниях датчика.
+      Note! Пока показания датчика считаются недостоверными  только при "обрыве
+   датчика". Возможно недостоверность надо присваивать также при выходе из 
+   номинального диапазона (при lblErr=1 или 2).
+*)
+
+ // Назначение HmiSensAiDefect - метки о недостоверных показаниях датчика.
+    if DbSensAI.SensAIParam[n1].lblErr=3
+    then
+      DbSensAI.SensAIParam[n1].HmiSensAiDefect:=true; // датчик неисправный 
+ //     DbSensAI.SensAIParam[n1].Value:=SubstErrVal;  // отбражаемое значение в случае обрыва датчика ???????????? 
+    else
+      DbSensAI.SensAIParam[n1].HmiSensAiDefect:=false; // датчик исправный
+    end_if; // DbSensAI.SensAIParam[n1].lblErr=3
+          
+  end_for; // for n1
+   
+end_if; // if Quant_Tm1>=0
+
+(*
+      3. Циклическое чтение значений "булевых" сигналов (DI) подсистем Загазованности,
+   ПТН, Воздухосборника, Линни Импульсных Трубок (кроме DI-сигналов от кранов ЭППУ).
+*)
+
+ if Quant_Tm1>=6 and Quant_Tm1<=8 // д.б. согласовано с интервалами опроса AI-сигналов
+ then
+ 
+(*
+      3.1 Чтение значений DI-сигналов Загазованоости блоков Сепараторов.
+*)
+
+  for i1:=1 to DbSensBool.numZagazBlockInSep do
+   for j1:=1 to 2 do
+    DbSensBool.ZagazPar_SepBlock[i1,j1].Value:=I[DbSensBool.ZagazPar_SepBlock[i1,j1].adr1,
+                                                 DbSensBool.ZagazPar_SepBlock[i1,j1].adr2];
+   end_for; // for j1
+  end_for; // for i1
+ 
+(*
+      3.2 Чтение значений DI-сигналов Загазованоости блоков Операторной.
+*)
+
+  for i1:=1 to DbSensBool.numZagazBlockInOper do
+   for j1:=1 to 2 do
+    DbSensBool.ZagazPar_OperBlock[i1,j1].Value:=I[DbSensBool.ZagazPar_OperBlock[i1,j1].adr1,
+                                               DbSensBool.ZagazPar_OperBlock[i1,j1].adr2];
+   end_for; // for j1
+  end_for; // for i1
+
+(*
+      3.3 Чтение значений DI-сигналов Загазованоости блоков УОУ.
+*)
+
+  for i1:=1 to DbSensBool.numZagazBlockInUou do
+   for j1:=1 to 2 do
+    DbSensBool.ZagazPar_UouBlock[i1,j1].Value:=I[DbSensBool.ZagazPar_UouBlock[i1,j1].adr1,
+                                                 DbSensBool.ZagazPar_UouBlock[i1,j1].adr2];
+   end_for; // for j1
+  end_for; // for i1
+ 
+(*
+      3.4 Чтение значений DI-сигналов газосигнализаторов СНМ-10 сепараторов и УОУ
+   подсистемы загазованности (по 1 шт)
+*)
+
+  DbSensBool.ZagazPar_SepCHM10.Value:=I[DbSensBool.ZagazPar_SepCHM10.adr1,
+                                        DbSensBool.ZagazPar_SepCHM10.adr2];
+
+  DbSensBool.ZagazPar_UouCHM10.Value:=I[DbSensBool.ZagazPar_UouCHM10.adr1,
+                                        DbSensBool.ZagazPar_UouCHM10.adr2];
+                                        
+(*
+      3.5 Чтение значений DI-сигналов подсистемы "ПТН".
+*)
+
+  DbSensBool.PtnPar_HeaterOn.Value:=I[DbSensBool.PtnPar_HeaterOn.adr1,
+                                      DbSensBool.PtnPar_HeaterOn.adr2];
+                                      
+  DbSensBool.PtnPar_HeaterBreak.Value:=I[DbSensBool.PtnPar_HeaterBreak.adr1,
+                                         DbSensBool.PtnPar_HeaterBreak.adr2];
+                                         
+  DbSensBool.PtnPar_P_malo.Value:=I[DbSensBool.PtnPar_P_malo.adr1,
+                                    DbSensBool.PtnPar_P_malo.adr2];
+  
+(*
+      3.6 Чтение значений DI-сигналов подсистемы "Воздухосборник".
+*)
+ 
+  DbSensBool.VsbPar_P_DoE1Malo.Value:=I[DbSensBool.VsbPar_P_DoE1Malo.adr1,
+                                        DbSensBool.VsbPar_P_DoE1Malo.adr2];   
+                                                                             
+  DbSensBool.VsbPar_P_PosleE1Malo.Value:=I[DbSensBool.VsbPar_P_PosleE1Malo.adr1,
+                                           DbSensBool.VsbPar_P_PosleE1Malo.adr2];
+
+(*
+      3.7 Чтение значений DI-сигналов подсистемы "Линия Импульсных Трубок".
+*)
+
+
+  DbSensBool.LitPar_T_ObrVodii_AvtVkl.Value:=I[DbSensBool.LitPar_T_ObrVodii_AvtVkl.adr1,
+                                               DbSensBool.LitPar_T_ObrVodii_AvtVkl.adr2];
+                                               
+  DbSensBool.LitPar_ObogrevIT_Vkl.Value:=I[DbSensBool.LitPar_ObogrevIT_Vkl.adr1,
+                                           DbSensBool.LitPar_ObogrevIT_Vkl.adr2];
+                                           
+  DbSensBool.LitPar_ObogrevIT_Viikl.Value:=I[DbSensBool.LitPar_ObogrevIT_Viikl.adr1,
+                                             DbSensBool.LitPar_ObogrevIT_Viikl.adr2];
+                                             
+  DbSensBool.LitPar_ObogrevIT_Avariia.Value:=I[DbSensBool.LitPar_ObogrevIT_Avariia.adr1,
+                                               DbSensBool.LitPar_ObogrevIT_Avariia.adr2];
+ end_if;  // if Quant_Tm1>=6 ..
+
+(*
+      4. Циклическое чтение значений парметров БУ ВН2012 и их анализ 
+      Notes! n1) Много "наюлюдательных" параметров в структуре. Вместо некоторых () м.было бы обойтись :
+   использовать локальные переменные или не исп. в программе. Пока по сути, реально нужно только errDataRefresh
+*)
+
+ if Quant_Tm1>=9 and Quant_Tm1<=10 // д.б. согласовано с интервалами опроса AI-сигналов
+ then
+ 
+(*
+      4.1 Чтение параметров из db_BU.
+      Notes! n1) Вместо db_BU.CP[0].PORT[0].BU[0].Addr важнее проверять адрес опроса для 1-й нитки
+   db_BU.CP[0].PORT[0].BU[0].snd[0].adress
+*)
+
+ // BU1 (СП1) : 
+  DbSepBu.SepBuParam[1].addr:=db_BU.CP[0].PORT[0].BU[0].Addr; 
+  DbSepBu.SepBuParam[1].vDbBu_Pipe0:=db_BU.CP[0].PORT[0].BU[0].PIPE[0]; 
+  DbSepBu.SepBuParam[1].vDbBu_Pipe1:=db_BU.CP[0].PORT[0].BU[0].PIPE[1]; 
+ 
+ // BU2 (ПТН) : 
+  DbSepBu.SepBuParam[2].addr:=db_BU.CP[0].PORT[0].BU[1].Addr; 
+  DbSepBu.SepBuParam[2].vDbBu_Pipe0:=db_BU.CP[0].PORT[0].BU[1].PIPE[0]; 
+  DbSepBu.SepBuParam[2].vDbBu_Pipe1:=db_BU.CP[0].PORT[0].BU[1].PIPE[1]; 
+ 
+ // BU3 (СИ1) : 
+  DbSepBu.SepBuParam[3].addr:=db_BU.CP[0].PORT[0].BU[0].Addr; 
+  DbSepBu.SepBuParam[3].vDbBu_Pipe0:=db_BU.CP[0].PORT[1].BU[0].PIPE[0]; 
+  DbSepBu.SepBuParam[3].vDbBu_Pipe1:=db_BU.CP[0].PORT[1].BU[0].PIPE[1]; 
+ 
+ // BU4 (СИ2) : 
+  DbSepBu.SepBuParam[4].addr:=db_BU.CP[0].PORT[0].BU[0].Addr; 
+  DbSepBu.SepBuParam[4].vDbBu_Pipe0:=db_BU.CP[0].PORT[1].BU[1].PIPE[0]; 
+  DbSepBu.SepBuParam[4].vDbBu_Pipe1:=db_BU.CP[0].PORT[1].BU[1].PIPE[1]; 
+ 
+  for n1:=1 to DbSepBu.numSepBuParam do  // Всего 4 БУ    
+    indP:=DbSepBu.SepBuParam[n1].vDbBu_Pipe0; // индекс эл-тов в Db_PIPE со значениями параметров для 1-й нитки БУ[n1]
+    if (DbSepBu.SepBuParam[n1].EmulBuParam)
+    then
+      db_PIPE.P[indP].Temp.RVal:=DbSensAI.SensAIParam[1].Value;   //T - температура газа  СИ1
+      db_PIPE.P[indP].Press.RVal:=DbSensAI.SensAIParam[2].Value;  //P - давление газа СИ1
+      db_PIPE.P[indP].PPress.RVal:=DbSensAI.SensAIParam[3].Value; //dP - перепад давления СИ1
+ 
+      // расход газа на 1-й нитке : мгновенный (c БУ приходит в м3/час)
+      db_PIPE.P[indP].FLOW.RVal:= DbControl.DtPlc_Format_Int.Minute + 
+      DbControl.DtPlc_Format_Int.Sec/100.0;  // 855.7; DbControl.DtPlc_Format_Int.Hour*1000 +
+      
+      // расход газа на 1-й нитке : зацикленный счётчик РГ за сезон в БУ : [0-X] (или [1-X] ?)
+      db_PIPE.P[indP].FLOW.RCnt:=(db_PIPE.P[indP].FLOW.RCnt+n1*0.1);
+      if db_PIPE.P[indP].FLOW.RCnt>DbFlowControl.BoundBuCount
+      then 
+        db_PIPE.P[indP].FLOW.RCnt:=db_PIPE.P[indP].FLOW.RCnt-DbFlowControl.BoundBuCount;
+      end_if; // if db_PIPE.P[indP].FLOW.RCnt>DbFlowControl.BoundBuCount
+      
+      // обновление параметра, по которому КК определяет "Нет связи" (DbSepBu.SepBuParam[].CheckRefresh)
+      db_PIPE.P[indP].KRU.RCal_Pos_Drv:=1; // главное что-то записать, чтобы не было Invalid
+      
+    end_if; // if (DbSepBu.SepBuParam[n1].EmulBuParam)
+  end_for; // for n1
+
+(*
+      4.2 Чтение параметров из db_PIPE.
+*)
+
+  for n1:=1 to DbSepBu.numSepBuParam do  // Всего 4 БУ    
+    indP:=DbSepBu.SepBuParam[n1].vDbBu_Pipe0; // индекс эл-тов в Db_PIPE со значениями параметров для 1-й нитки БУ[n1]
+    DbSepBu.SepBuParam[n1].Temp_RVal:=db_PIPE.P[indP].Temp.RVal;
+    DbSepBu.SepBuParam[n1].Press_RVal:=db_PIPE.P[indP].Press.RVal;
+    DbSepBu.SepBuParam[n1].PPress_RVal:=db_PIPE.P[indP].PPress.RVal;
+    DbSepBu.SepBuParam[n1].Flow_RVal:=db_PIPE.P[indP].FLOW.RVal;
+    DbSepBu.SepBuParam[n1].Flow_RFlowHour:=db_PIPE.P[indP].FLOW.RFlowHour;
+    DbSepBu.SepBuParam[n1].Flow_RFlowDay:=db_PIPE.P[indP].FLOW.RFlowDay;
+    DbSepBu.SepBuParam[n1].Flow_RCnt:=db_PIPE.P[indP].FLOW.RCnt;
+    DbSepBu.SepBuParam[n1].CheckRefresh:=db_PIPE.P[indP].KRU.RCal_Pos_Drv;
+    if (DbSepBu.SepBuParam[n1].lblErrDataRefresh) and (DbSepBu.SepBuParam[n1].CheckRefresh<>SubstErrVal)
+    then // снятие признака ошибки сразу после замены SubstErrVal
+      DbSepBu.SepBuParam[n1].lblErrDataRefresh:=false;   
+    end_if; // if (DbSepBu.SepBuParam[n1].lblErrDataRefresh) and..
+  end_for; // for n1
+ 
+(*
+      4.3 Пере.. параметров из db_PIPE.
+*)
+
+  Tm2:=s_odt(t_no:=2,s:=not Tm2Impuls,tv:=Tm2Value,q:=Tm2Impuls); // таймер №2!  t#1s 
+  if Tm2Impuls // импульс приходит через 1 s
+  then
+    for n1:=1 to DbSepBu.numSepBuParam do  // Всего 4 БУ
+      indP:=DbSepBu.SepBuParam[n1].vDbBu_Pipe0; // индекс эл-тов в Db_PIPE со значениями параметров для 1-й нитки БУ[n1]
+      if  DbSepBu.SepBuParam[n1].CheckRefresh=SubstErrVal
+      then // значение поля не изменилось за Tm2Value 
+      // ошибка : информация по нитке не обновляется
+        if DbSepBu.SepBuParam[n1].lblErrDataRefresh=false
+        then // впервые не восстановилось
+          DbSepBu.SepBuParam[n1].lblErrDataRefresh:=true;   
+          if (DbSepBu.SepBuParam[n1].lblSetSubstValue)
+          then // присвоение 999.9 всем полям
+            db_PIPE.P[indP].Temp.RVal:=SubstErrVal;
+            db_PIPE.P[indP].Press.RVal:=SubstErrVal;
+            db_PIPE.P[indP].PPress.RVal:=SubstErrVal;
+            db_PIPE.P[indP].FLOW.RVal:=SubstErrVal;
+            db_PIPE.P[indP].FLOW.RFlowHour:=SubstErrVal;
+            db_PIPE.P[indP].FLOW.RFlowDay:=SubstErrVal;
+            db_PIPE.P[indP].FLOW.RCnt:=SubstErrVal;
+          end_if; // if (DbSepBu.SepBuParam[n1].lblSetSubstValue)
+        end_if; // DbSepBu.SepBuParam[n1].errDataRefresh=false
+      else // значение поля восстановилось за Tm2Value, опять "дрючим" параметр "%КРУ)
+        DbSepBu.SepBuParam[n1].lblErrDataRefresh:=false;   
+        db_PIPE.P[indP].KRU.RCal_Pos_Drv:=SubstErrVal; 
+      end_if; // if DbSepBu.SepBuParam[n1].CheckRefreshR..
+
+    end_for; // for n1
+  end_if; // if Tm2Impuls
+
+(*
+      4.4 Копирование значения lblErrDataRefresh в db_PIPE.Invalid.
+      Note! Недостаток : "дрючим" признак Invalid. М. он
+*)
+
+  for n1:=1 to DbSepBu.numSepBuParam do  // Всего 4 БУ    
+    if (DbSepBu.SepBuParam[n1].lblCopyErrToInvalid)
+    then
+      indP:=DbSepBu.SepBuParam[n1].vDbBu_Pipe0; // индекс эл-тов в Db_PIPE со значениями параметров для 1-й нитки БУ[n1]
+      db_PIPE.P[indP].Invalid:=DbSepBu.SepBuParam[n1].lblErrDataRefresh;
+    end_if; // if DbSepBu.SepBuParam[n1].lblCopyErrToInvalid)
+  end_for; // for n1
+
+(*
+      4.5 Обработка битовых сообщений для БУ : Нет связи \ Связь с БУ восстановлена
+*)
+
+  for n1:=0 to 3 do  // Всего 4 БУ    
+    if (db_PIPE.P[n1].Invalid)
+    then // ошибка : информация по нитке не обновляется
+      DbBitMess.Mess_BU_ErrRefresh:=FcSetBit(ObjW:=DbBitMess.Mess_BU_ErrRefresh, NumPos:=n1+1, BitVal_W:=1);
+      DbBitMess.Mess_BU_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_BU_Norm, NumPos:=n1+1, BitVal_W:=0);
+    else  
+      DbBitMess.Mess_BU_ErrRefresh:=FcSetBit(ObjW:=DbBitMess.Mess_BU_ErrRefresh, NumPos:=n1+1, BitVal_W:=0);
+      DbBitMess.Mess_BU_Norm:=FcSetBit(ObjW:=DbBitMess.Mess_BU_Norm, NumPos:=n1+1, BitVal_W:=1);
+    end_if; // if (DbSepBu.SepBuParam[n1].lblErrDataRefresh)
+  end_for; // for n1
+
+end_if;  // if Quant_Tm1>=9 ..
+
+end_function_block
+
+// Объявление Instance idb_fb_ParScan (Db251) для fb_ParScan (FB251)
+Data_Block idb_fb_ParScan fb_ParScan  //DB251 FB251
+Begin
+End_Data_Block
+
