@@ -9,3 +9,5 @@ print("feature/er3 - ошибка при удалении сопутствующих файлов")
  print("br_err3a - а если сливать в 2 этапа?")
  -- 30.09.17 console cmd
  add sepGsp2_150716
+ -- 13.10.15
+ print("Hello my dear friend");
