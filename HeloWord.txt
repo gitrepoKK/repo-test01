@@ -10,4 +10,4 @@ print("feature/er3 - ошибка при удалении сопутствующих файлов")
  -- 30.09.155555555555 console cmd
  add sepGsp2_150716
  -- 13.10.15
- print("Hello my dear friend");
+ print("Hello my dear friend_659_adv2");
